@@ -10,8 +10,8 @@
 </p>
 
 <p align="center">
-  <img src="screenshot.png" alt="I2P Torrents GUI" width="900" /><br>
-  <img src="screenshot2.png" alt="I2P Torrents GUI — torrent list" width="900" />
+  <img src="screenshot2.png" alt="I2P Torrents GUI — torrent list" width="900" /><br>
+  <img src="screenshot.png" alt="I2P Torrents GUI" width="900" />
 </p>
 
 ---
