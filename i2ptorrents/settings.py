@@ -6,6 +6,8 @@ import sys
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from .i18n import normalize_language
+
 
 def config_dir() -> Path:
     if sys.platform == "win32":
@@ -23,6 +25,9 @@ class AppSettings:
     torrents_dir: str = str(Path.home() / "torrents")
     refresh_seconds: int = 5
     theme: str = "light"
+    language: str = "en"
+    torrent_view: str = "detailed"
+    http_proxy: str = "socks5://127.0.0.1:4447"
 
     @classmethod
     def load(cls, path: Path | None = None) -> "AppSettings":
@@ -37,6 +42,9 @@ class AppSettings:
                 torrents_dir=str(data.get("torrents_dir", str(Path.home() / "torrents"))),
                 refresh_seconds=min(60, max(2, int(data.get("refresh_seconds", 5)))),
                 theme="night" if data.get("theme") == "night" else "light",
+                language=normalize_language(str(data.get("language", defaults.language))),
+                torrent_view=_normalize_view(str(data.get("torrent_view", defaults.torrent_view))),
+                http_proxy=_migrate_proxy(str(data.get("http_proxy", defaults.http_proxy))),
             )
         except (OSError, ValueError, TypeError, json.JSONDecodeError):
             return defaults
@@ -47,3 +55,22 @@ class AppSettings:
         temporary = target.with_suffix(".tmp")
         temporary.write_text(json.dumps(asdict(self), ensure_ascii=False, indent=2), encoding="utf-8")
         temporary.replace(target)
+
+    def torrents_path(self) -> Path:
+        path = Path(self.torrents_dir).expanduser()
+        if not str(path).strip():
+            path = Path.home() / "torrents"
+            self.torrents_dir = str(path)
+        path.mkdir(parents=True, exist_ok=True)
+        return path
+
+
+def _normalize_view(value: str) -> str:
+    return "simple" if value.strip().lower() in {"simple", "compact", "упрощённый", "упрощенный"} else "detailed"
+
+
+def _migrate_proxy(value: str) -> str:
+    raw = value.strip()
+    if raw == "":
+        return "socks5://127.0.0.1:4447"
+    return raw

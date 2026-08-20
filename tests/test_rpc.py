@@ -21,7 +21,7 @@ def test_normalize_rpc_url(value: str, expected: str) -> None:
 
 
 def test_remote_rpc_is_rejected_because_i2pd_has_no_authentication() -> None:
-    with pytest.raises(ValueError, match="только локальный"):
+    with pytest.raises(ValueError, match="local address"):
         normalize_rpc_url("http://192.0.2.10:9191/mytorrents")
 
 
@@ -44,6 +44,22 @@ def test_get_torrents_accepts_i2pd_result_shape(monkeypatch: pytest.MonkeyPatch)
     torrent = client.get_torrents()[0]
     assert torrent.name == "Example"
     assert torrent.progress == 0.75
+    assert "pieces" in client.FIELDS
+
+
+def test_get_torrents_omits_pieces_in_simple_view(monkeypatch: pytest.MonkeyPatch) -> None:
+    client = TransmissionRPC("localhost:9191/mytorrents")
+    captured = {}
+
+    def call(method: str, arguments: dict) -> dict:
+        captured.update(method=method, arguments=arguments)
+        return {"torrents": []}
+
+    monkeypatch.setattr(client, "_call", call)
+    client.get_torrents(detailed=False)
+    assert captured["method"] == "torrent-get"
+    assert "pieces" not in captured["arguments"]["fields"]
+    assert "hashString" in captured["arguments"]["fields"]
 
 
 def test_add_torrent_sends_base64(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

@@ -5,3 +5,12 @@ __pycache__/
 build/
 dist/
 *.spec
+!I2PTorrents.spec
+icon.png
+I2PTorrents.ico
+I2PTorrents.icns
+I2PTorrents.iconset/
+I2PTorrents.AppDir/
+appimagetool-*.AppImage
+I2PTorrents-*.zip
+I2PTorrents-*.AppImage

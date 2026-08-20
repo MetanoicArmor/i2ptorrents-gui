@@ -8,15 +8,15 @@ version = "0.1.0"
 description = "Cross-platform desktop GUI for i2pd torrents"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "AGPL-3.0-or-later" }
-authors = [{ name = "MetanoicArmor" }]
+license = { text = "BSD-3-Clause" }
+authors = [{ name = "Vade" }]
 dependencies = ["PyQt6>=6.7"]
 
 [project.scripts]
 i2ptorrents-gui = "i2ptorrents.main:main"
 
 [dependency-groups]
-dev = ["pytest>=8", "pytest-qt>=4", "pyinstaller>=6"]
+dev = ["pytest>=8", "pytest-qt>=4", "pyinstaller>=6", "pillow>=10"]
 
 [tool.hatch.build.targets.wheel]
 packages = ["i2ptorrents"]
