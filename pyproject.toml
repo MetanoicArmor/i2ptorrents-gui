@@ -1,0 +1,26 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "i2ptorrents-gui"
+version = "0.1.0"
+description = "Cross-platform desktop GUI for i2pd torrents"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "AGPL-3.0-or-later" }
+authors = [{ name = "MetanoicArmor" }]
+dependencies = ["PyQt6>=6.7"]
+
+[project.scripts]
+i2ptorrents-gui = "i2ptorrents.main:main"
+
+[dependency-groups]
+dev = ["pytest>=8", "pytest-qt>=4", "pyinstaller>=6"]
+
+[tool.hatch.build.targets.wheel]
+packages = ["i2ptorrents"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
