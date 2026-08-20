@@ -582,7 +582,7 @@ class MainWindow(QtWidgets.QMainWindow):
 
     def retranslate(self) -> None:
         self.setWindowTitle(f"{APP_NAME} {__version__}")
-        self.subtitle.setText(t("subtitle", version=__version__))
+        self.subtitle.setText(t("subtitle"))
         self.section.setText(t("section_torrents"))
         self.filters["all"].setText(t("filter_all"))
         self.filters["downloading"].setText(t("filter_downloading"))

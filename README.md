@@ -9,6 +9,10 @@
   <a href="#english">English</a> · <a href="#русский">Русский</a>
 </p>
 
+<p align="center">
+  <img src="screenshot.png" alt="I2P Torrents GUI" width="900" />
+</p>
+
 ---
 
 ## English

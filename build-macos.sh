@@ -61,6 +61,8 @@ else
   echo "WARNING: I2PTorrents.icns not found, using icon.png"
   cp "icon.png" "dist/${APP_NAME}.app/Contents/Resources/I2PTorrents.icns"
 fi
+# Finder кэширует иконку бандла; mtime .app сбрасывает подложку от старого icns.
+touch "dist/${APP_NAME}.app" "dist/${APP_NAME}.app/Contents/Info.plist"
 printf '%s\n' '#!/bin/sh' "exec \"\$(dirname \"\$0\")/../Resources/${APP_NAME}/${APP_NAME}\" \"\$@\"" \
   > "dist/${APP_NAME}.app/Contents/MacOS/${APP_NAME}"
 chmod +x "dist/${APP_NAME}.app/Contents/MacOS/${APP_NAME}"

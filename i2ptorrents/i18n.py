@@ -7,7 +7,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "en": {
         "language_name_en": "English",
         "language_name_ru": "Русский",
-        "subtitle": "for i2pd · {version}",
+        "subtitle": "for i2pd",
         "about": "About",
         "about_title": "About I2P Torrents",
         "about_body": "Version {version}\nAuthor: {author}\nLicense: {license}",
@@ -163,7 +163,7 @@ STRINGS: dict[str, dict[str, str]] = {
     "ru": {
         "language_name_en": "English",
         "language_name_ru": "Русский",
-        "subtitle": "для i2pd · {version}",
+        "subtitle": "для i2pd",
         "about": "О программе",
         "about_title": "О I2P Torrents",
         "about_body": "Версия {version}\nАвтор: {author}\nЛицензия: {license}",

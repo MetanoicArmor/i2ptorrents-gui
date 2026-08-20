@@ -24,7 +24,7 @@ def test_normalize_language() -> None:
 def test_about_strings() -> None:
     set_language("en")
     assert t("about") == "About"
-    assert "0.1.0" in t("subtitle", version="0.1.0")
+    assert t("subtitle") == "for i2pd"
     assert "BSD-3-Clause" in t("about_body", version="0.1.0", author="Vade", license="BSD-3-Clause")
     set_language("ru")
     assert t("about") == "О программе"
