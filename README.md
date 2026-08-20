@@ -56,7 +56,7 @@ i2pd RPC has no authentication or TLS, so the GUI only allows loopback
 Python 3.10+ is required.
 
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate       # Windows: .venv\Scripts\activate
 pip install -e .
 i2ptorrents-gui
@@ -65,6 +65,14 @@ i2ptorrents-gui
 ### Build
 
 The icon source is `image.png`. The scripts produce `icon.png`, a Windows `.ico`, and (on macOS) `.icns`, then pack a PyInstaller onedir.
+
+From the repo root (do not wrap the path in extra quotes):
+
+```bash
+./build-macos.sh      # macOS
+./build-linux.sh      # Linux
+i2ptorrents-build     # same, after `pip install -e .`
+```
 
 **macOS**
 
@@ -143,7 +151,7 @@ http://127.0.0.1:9191/mytorrents
 Требуется Python 3.10+.
 
 ```bash
-python -m venv .venv
+python3 -m venv .venv
 source .venv/bin/activate       # Windows: .venv\Scripts\activate
 pip install -e .
 i2ptorrents-gui
@@ -152,6 +160,14 @@ i2ptorrents-gui
 ### Сборка
 
 Исходник иконки — `image.png`. Скрипты собирают `icon.png`, Windows `.ico` и (на macOS) `.icns`, затем упаковывают onedir PyInstaller.
+
+Из корня репозитория (без лишних кавычек вокруг пути):
+
+```bash
+./build-macos.sh      # macOS
+./build-linux.sh      # Linux
+i2ptorrents-build     # то же после `pip install -e .`
+```
 
 **macOS**
 
