@@ -26,4 +26,4 @@ jobs:
           QT_QPA_PLATFORM: offscreen
         run: python -m pytest
       - name: Build application
-        run: pyinstaller --noconfirm --windowed --name I2PTorrents i2ptorrents/main.py
+        run: pyinstaller --noconfirm --windowed --name I2PTorrents run_gui.py

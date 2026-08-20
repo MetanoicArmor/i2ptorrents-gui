@@ -48,7 +48,7 @@ i2ptorrents-gui
 
 ```bash
 pip install -e . pyinstaller
-pyinstaller --noconfirm --windowed --name I2PTorrents i2ptorrents/main.py
+pyinstaller --noconfirm --windowed --name I2PTorrents run_gui.py
 ```
 
 ## Ограничения i2pd RPC
