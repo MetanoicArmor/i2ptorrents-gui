@@ -108,6 +108,10 @@ Python 3.10+, Pillow, and PyInstaller are required (the scripts install them int
 
 Current i2pd only exposes `torrent-add`, `torrent-get`, and `torrent-remove`. Pause, resume, tracker edits, and speed limits are not available on the daemon yet. Magnets are not accepted over RPC: the GUI downloads a `.torrent` from Postman through the i2pd SOCKS proxy (`127.0.0.1:4447`) and sends it as `metainfo`.
 
+### License
+
+[BSD 3-Clause](LICENSE). Author: [Vade](AUTHORS).
+
 ---
 
 ## Русский
@@ -203,21 +207,13 @@ i2ptorrents-build     # то же после `pip install -e .`
 
 Текущая реализация i2pd предоставляет только `torrent-add`, `torrent-get` и `torrent-remove`. Пауза, возобновление, изменение трекеров и лимитов скорости пока не поддерживаются на стороне i2pd. Magnet RPC не принимает: GUI скачивает `.torrent` с Postman через SOCKS-прокси i2pd (`127.0.0.1:4447`) и передаёт его как `metainfo`.
 
----
+### Лицензия
 
-## License / Лицензия
-
-[BSD 3-Clause](LICENSE), same as [i2pd](https://github.com/PurpleI2P/i2pd). Author: [Vade](AUTHORS).
-
-[BSD 3-Clause](LICENSE), как у [i2pd](https://github.com/PurpleI2P/i2pd). Автор — [Vade](AUTHORS).
+[BSD 3-Clause](LICENSE). Автор: [Vade](AUTHORS).
 
 ---
 
-## Support / Поддержка
-
-If this project is useful, you can support development with **GRAM (ex-TON)**:
-
-Если проект полезен, можно поддержать разработку в **GRAM (ex-TON)**:
+## Support
 
 <div align="center">
 
