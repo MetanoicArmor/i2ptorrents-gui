@@ -14,10 +14,10 @@ def test_repo_root_contains_packaging_scripts() -> None:
 
 def test_build_command_selects_platform_script() -> None:
     root = Path("/tmp/i2ptorrents")
-    assert build_command(root, "darwin") == ["bash", "/tmp/i2ptorrents/build-macos.sh"]
-    assert build_command(root, "linux") == ["bash", "/tmp/i2ptorrents/build-linux.sh"]
+    assert build_command(root, "darwin") == ["bash", str(root / "build-macos.sh")]
+    assert build_command(root, "linux") == ["bash", str(root / "build-linux.sh")]
     windows = build_command(root, "win32")
-    assert windows[-1] == "/tmp/i2ptorrents/build-windows.ps1"
+    assert windows[-1] == str(root / "build-windows.ps1")
     assert windows[0] == "powershell"
 
 
