@@ -1,13 +1,14 @@
 from __future__ import annotations
 
 import base64
+import ipaddress
 import json
 import socket
 from pathlib import Path
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit, urlunsplit
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, ProxyHandler, Request, build_opener
 
 from .models import Torrent
 
@@ -25,6 +26,15 @@ def normalize_rpc_url(value: str) -> str:
     parsed = urlsplit(raw)
     if parsed.scheme not in {"http", "https"} or not parsed.hostname:
         raise ValueError("Некорректный адрес RPC")
+    host = parsed.hostname.rstrip(".").lower()
+    if host != "localhost":
+        try:
+            if not ipaddress.ip_address(host).is_loopback:
+                raise ValueError
+        except ValueError as exc:
+            raise ValueError(
+                "RPC i2pd не имеет авторизации: разрешён только локальный адрес"
+            ) from exc
     path = parsed.path.rstrip("/")
     if not path.endswith("/rpc"):
         path += "/rpc"
@@ -33,6 +43,7 @@ def normalize_rpc_url(value: str) -> str:
 
 
 class TransmissionRPC:
+    MAX_RESPONSE_BYTES = 8 * 1024 * 1024
     FIELDS = (
         "id", "name", "status", "isFinished", "sizeWhenDone", "leftUntilDone",
         "rateDownload", "rateUpload", "peersGettingFromUs", "peersSendingToUs",
@@ -43,6 +54,7 @@ class TransmissionRPC:
         self.endpoint = normalize_rpc_url(endpoint)
         self.timeout = timeout
         self._tag = 0
+        self._opener = build_opener(ProxyHandler({}), _RejectRedirects())
 
     def _call(self, method: str, arguments: dict[str, Any]) -> dict[str, Any]:
         self._tag += 1
@@ -61,8 +73,11 @@ class TransmissionRPC:
             method="POST",
         )
         try:
-            with urlopen(request, timeout=self.timeout) as response:
-                payload = json.loads(response.read().decode("utf-8"))
+            with self._opener.open(request, timeout=self.timeout) as response:
+                raw = response.read(self.MAX_RESPONSE_BYTES + 1)
+                if len(raw) > self.MAX_RESPONSE_BYTES:
+                    raise RPCError("Ответ i2pd слишком велик")
+                payload = json.loads(raw.decode("utf-8"))
         except HTTPError as exc:
             detail = exc.read().decode("utf-8", "replace").strip()
             raise RPCError(f"RPC вернул HTTP {exc.code}: {detail or exc.reason}") from exc
@@ -106,3 +121,8 @@ class TransmissionRPC:
 
     def remove_torrent(self, torrent_id: int, delete_data: bool = False) -> None:
         self._call("torrent-remove", {"ids": [torrent_id], "delete-local-data": delete_data})
+
+
+class _RejectRedirects(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # type: ignore[no-untyped-def]
+        raise RPCError("i2pd RPC не должен перенаправлять запросы")

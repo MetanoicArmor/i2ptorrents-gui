@@ -20,6 +20,11 @@ def test_normalize_rpc_url(value: str, expected: str) -> None:
     assert normalize_rpc_url(value) == expected
 
 
+def test_remote_rpc_is_rejected_because_i2pd_has_no_authentication() -> None:
+    with pytest.raises(ValueError, match="только локальный"):
+        normalize_rpc_url("http://192.0.2.10:9191/mytorrents")
+
+
 def test_get_torrents_accepts_i2pd_result_shape(monkeypatch: pytest.MonkeyPatch) -> None:
     client = TransmissionRPC("localhost:9191/mytorrents")
     monkeypatch.setattr(
