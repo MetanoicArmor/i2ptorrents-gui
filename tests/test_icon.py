@@ -1,7 +1,7 @@
 from pathlib import Path
 import sys
 
-from i2ptorrents.main import application_icon_path
+from i2ptorrents import application_icon_path
 
 
 def test_source_icon_falls_back_to_image_png() -> None:

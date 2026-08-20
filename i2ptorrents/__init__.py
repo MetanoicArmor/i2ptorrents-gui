@@ -41,6 +41,14 @@ def resource_path(name: str) -> Path | None:
     return None
 
 
+def application_icon_path() -> Path | None:
+    for name in ("icon.png", "I2PTorrents.ico", "image.png"):
+        path = resource_path(name)
+        if path is not None:
+            return path
+    return None
+
+
 def read_version(default: str = "0.1.0") -> str:
     path = resource_path("VERSION")
     if path is None:

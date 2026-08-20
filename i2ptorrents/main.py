@@ -6,7 +6,7 @@ from typing import Any, Callable
 
 from PyQt6 import QtCore, QtGui, QtWidgets
 
-from . import APP_AUTHOR, APP_LICENSE, APP_NAME, __version__, resource_path
+from . import APP_AUTHOR, APP_LICENSE, APP_NAME, __version__, application_icon_path
 from .i18n import language, normalize_language, set_language, t
 from .magnet import MagnetError, download_torrent_from_magnet, normalize_http_proxy, parse_magnet
 from .models import Torrent, TorrentStatus, format_bytes, format_rate
@@ -29,14 +29,6 @@ def _native_shortcut(*portable: str) -> str:
 def _tip_with_shortcut(label: str, *portable: str) -> str:
     native = _native_shortcut(*portable)
     return f"{label} ({native})" if native else label
-
-
-def application_icon_path() -> Path | None:
-    for name in ("icon.png", "I2PTorrents.ico", "image.png"):
-        path = resource_path(name)
-        if path is not None:
-            return path
-    return None
 
 
 class WorkerSignals(QtCore.QObject):
