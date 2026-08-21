@@ -10,8 +10,8 @@
 </p>
 
 <p align="center">
-  <img src="screenshot2.png" alt="I2P Torrents GUI — torrent list" width="900" /><br>
-  <img src="screenshot.png" alt="I2P Torrents GUI" width="900" />
+  <img src="screenshots/screenshot2.png" alt="I2P Torrents GUI — torrent list" width="900" /><br>
+  <img src="screenshots/screenshot.png" alt="I2P Torrents GUI" width="900" />
 </p>
 
 ---
@@ -24,9 +24,8 @@ A desktop client for i2pd’s torrent tunnel. The UI follows the look of [I2PCha
 
 - torrent list, progress, piece map, rates, peers, and info hash;
 - simple card view in settings (no piece bar or hash);
-- copy info hash / magnet and open the download folder;
-- add `.torrent` files and magnet links (`xt=urn:btih:…`);
-- magnets are resolved via [Postman](http://tracker2.postman.i2p) and the i2pd SOCKS proxy (`127.0.0.1:4447`);
+- copy info hash and open the download folder;
+- add `.torrent` files;
 - remove a torrent alone or together with downloaded data;
 - search, filters, UI language (English / Русский), and theme in settings;
 - automatic refresh and connection diagnostics;
@@ -58,25 +57,29 @@ i2pd RPC has no authentication or TLS, so the GUI only allows loopback
 
 ### Run from source
 
-Python 3.10+ is required.
+The GUI is a **Rust + Qt Widgets** desktop app (same QSS themes). It talks to i2pd over Transmission RPC.
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate       # Windows: .venv\Scripts\activate
-pip install -e .
-i2ptorrents-gui
+# Qt 6 development packages, then:
+#   macOS: brew install qt@6 rust
+#   Debian/Ubuntu: sudo apt install qt6-base-dev qt6-tools-dev
+cargo test --no-default-features
+# macOS Homebrew needs C++17 and framework headers:
+./scripts/cargo-qt.sh run --features gui
+# same as:
+#   export CXXFLAGS="-std=c++17 -include arm_acle.h $(pkg-config --cflags Qt6Widgets Qt6Gui Qt6Core Qt6UiTools)"
+#   cargo run --features gui
 ```
 
 ### Build
 
-The icon source is `image.png`. The scripts produce `icon.png`, a Windows `.ico`, and (on macOS) `.icns`, then pack a PyInstaller onedir.
+The icon source is `image.png`. The scripts produce `icon.png`, a Windows `.ico` when ImageMagick is available, and (on macOS) `.icns`, then pack a release binary.
 
-From the repo root (do not wrap the path in extra quotes):
+From the repo root:
 
 ```bash
 ./build-macos.sh      # macOS
 ./build-linux.sh      # Linux
-i2ptorrents-build     # same, after `pip install -e .`
 ```
 
 **macOS**
@@ -85,7 +88,7 @@ i2ptorrents-build     # same, after `pip install -e .`
 ./build-macos.sh
 ```
 
-Result: `dist/I2PTorrents.app` and `I2PTorrents-macOS-<arch>-v<version>.zip`.
+Result: `dist/I2PTorrents.app` and `I2PTorrents-macOS-<arch>-v<version>.zip`. Requires `macdeployqt` (`brew install qt@6`).
 
 **Linux**
 
@@ -93,7 +96,7 @@ Result: `dist/I2PTorrents.app` and `I2PTorrents-macOS-<arch>-v<version>.zip`.
 ./build-linux.sh
 ```
 
-Result: `dist/I2PTorrents/`, `I2PTorrents-linux-<arch>-v<version>.zip`, and an AppImage in `dist/` when `appimagetool` is available.
+Result: `dist/I2PTorrents/` (launcher + bundled Qt libs), `I2PTorrents-linux-<arch>-v<version>.zip`, and an AppImage in `dist/` when `appimagetool` is available.
 
 **Windows** (PowerShell)
 
@@ -101,13 +104,13 @@ Result: `dist/I2PTorrents/`, `I2PTorrents-linux-<arch>-v<version>.zip`, and an A
 .\build-windows.ps1
 ```
 
-Result: `dist\I2PTorrents\I2PTorrents.exe` and `I2PTorrents-windows-x64-v<version>.zip`.
+Result: `dist\I2PTorrents\I2PTorrents.exe` and `I2PTorrents-windows-<arch>-v<version>.zip`. Requires `windeployqt` (Qt 6 `bin` on `PATH`).
 
-Python 3.10+, Pillow, and PyInstaller are required (the scripts install them into `.venv`). The release version comes from the `VERSION` file.
+Rust and Qt 6 are required. The release version comes from the `VERSION` file.
 
 ### i2pd RPC limits
 
-Current i2pd only exposes `torrent-add`, `torrent-get`, and `torrent-remove`. Pause, resume, tracker edits, and speed limits are not available on the daemon yet. Magnets are not accepted over RPC: the GUI downloads a `.torrent` from Postman through the i2pd SOCKS proxy (`127.0.0.1:4447`) and sends it as `metainfo`.
+Current i2pd only exposes `torrent-add`, `torrent-get`, and `torrent-remove`. Pause, resume, tracker edits, speed limits, and magnet links are not available on the daemon yet. Add a ready `.torrent` file.
 
 ### License
 
@@ -123,9 +126,8 @@ Current i2pd only exposes `torrent-add`, `torrent-get`, and `torrent-remove`. Pa
 
 - список торрентов, прогресс, карта кусков, скорости, пиры и info hash;
 - упрощённый вид карточек в настройках (без полосы кусков и хеша);
-- копирование info hash / magnet и открытие папки загрузки;
-- добавление `.torrent` и magnet-ссылок (`xt=urn:btih:…`);
-- magnet разрешается через [Postman](http://tracker2.postman.i2p) и SOCKS-прокси i2pd (`127.0.0.1:4447`);
+- копирование info hash и открытие папки загрузки;
+- добавление `.torrent`-файлов;
 - удаление торрента отдельно или вместе с загруженными данными;
 - поиск, фильтры, язык интерфейса (English / Русский) и тема в настройках;
 - автоматическое обновление и диагностика соединения;
@@ -157,25 +159,29 @@ http://127.0.0.1:9191/mytorrents
 
 ### Запуск из исходников
 
-Требуется Python 3.10+.
+GUI — это настольное приложение на **Rust + Qt Widgets** (те же QSS-темы). Оно ходит в i2pd по Transmission RPC.
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate       # Windows: .venv\Scripts\activate
-pip install -e .
-i2ptorrents-gui
+# пакеты Qt 6, затем:
+#   macOS: brew install qt@6 rust
+#   Debian/Ubuntu: sudo apt install qt6-base-dev qt6-tools-dev
+cargo test --no-default-features
+# на macOS Homebrew нужны C++17 и заголовки framework:
+./scripts/cargo-qt.sh run --features gui
+# то же самое:
+#   export CXXFLAGS="-std=c++17 -include arm_acle.h $(pkg-config --cflags Qt6Widgets Qt6Gui Qt6Core Qt6UiTools)"
+#   cargo run --features gui
 ```
 
 ### Сборка
 
-Исходник иконки — `image.png`. Скрипты собирают `icon.png`, Windows `.ico` и (на macOS) `.icns`, затем упаковывают onedir PyInstaller.
+Исходник иконки — `image.png`. Скрипты собирают `icon.png`, Windows `.ico` при наличии ImageMagick и (на macOS) `.icns`, затем упаковывают release-бинарник.
 
-Из корня репозитория (без лишних кавычек вокруг пути):
+Из корня репозитория:
 
 ```bash
 ./build-macos.sh      # macOS
 ./build-linux.sh      # Linux
-i2ptorrents-build     # то же после `pip install -e .`
 ```
 
 **macOS**
@@ -184,7 +190,7 @@ i2ptorrents-build     # то же после `pip install -e .`
 ./build-macos.sh
 ```
 
-Результат: `dist/I2PTorrents.app` и `I2PTorrents-macOS-<arch>-v<version>.zip`.
+Результат: `dist/I2PTorrents.app` и `I2PTorrents-macOS-<arch>-v<version>.zip`. Нужен `macdeployqt` (`brew install qt@6`).
 
 **Linux**
 
@@ -192,7 +198,7 @@ i2ptorrents-build     # то же после `pip install -e .`
 ./build-linux.sh
 ```
 
-Результат: `dist/I2PTorrents/`, `I2PTorrents-linux-<arch>-v<version>.zip` и при наличии `appimagetool` — AppImage в `dist/`.
+Результат: `dist/I2PTorrents/` (лаунчер и Qt-библиотеки), `I2PTorrents-linux-<arch>-v<version>.zip` и при наличии `appimagetool` — AppImage в `dist/`.
 
 **Windows** (PowerShell)
 
@@ -200,13 +206,13 @@ i2ptorrents-build     # то же после `pip install -e .`
 .\build-windows.ps1
 ```
 
-Результат: `dist\I2PTorrents\I2PTorrents.exe` и `I2PTorrents-windows-x64-v<version>.zip`.
+Результат: `dist\I2PTorrents\I2PTorrents.exe` и `I2PTorrents-windows-<arch>-v<version>.zip`. Нужен `windeployqt` (каталог `bin` Qt 6 в `PATH`).
 
-Нужны Python 3.10+, Pillow и PyInstaller (скрипты ставят их в `.venv`). Версия релиза берётся из файла `VERSION`.
+Нужны Rust и Qt 6. Версия релиза берётся из файла `VERSION`.
 
 ### Ограничения i2pd RPC
 
-Текущая реализация i2pd предоставляет только `torrent-add`, `torrent-get` и `torrent-remove`. Пауза, возобновление, изменение трекеров и лимитов скорости пока не поддерживаются на стороне i2pd. Magnet RPC не принимает: GUI скачивает `.torrent` с Postman через SOCKS-прокси i2pd (`127.0.0.1:4447`) и передаёт его как `metainfo`.
+Текущая реализация i2pd предоставляет только `torrent-add`, `torrent-get` и `torrent-remove`. Пауза, возобновление, изменение трекеров, лимитов скорости и magnet-ссылки пока не поддерживаются на стороне i2pd. Добавляйте готовый `.torrent`-файл.
 
 ### Лицензия
 

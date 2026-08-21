@@ -1,106 +1,118 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_NAME="I2PTorrents"
-VENV_DIR=".venv"
-cd "$(dirname "${BASH_SOURCE[0]}")"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source=scripts/package-common.sh
+. "${ROOT}/scripts/package-common.sh"
 
-VERSION_FILE="VERSION"
-if [ ! -f "${VERSION_FILE}" ]; then
-  echo "ERROR: VERSION file not found: ${VERSION_FILE}" >&2
-  exit 1
-fi
-RELEASE_VERSION="$(tr -d '\r\n' < "${VERSION_FILE}")"
-if [ -z "${RELEASE_VERSION}" ]; then
-  echo "ERROR: VERSION file is empty: ${VERSION_FILE}" >&2
-  exit 1
-fi
+[ "$(uname -s)" = "Darwin" ] || die "build-macos.sh must run on macOS"
 
-ARCH="$(uname -m)"
-case "${ARCH}" in
-  x86_64) ARCH_SUFFIX="x64" ;;
-  arm64)  ARCH_SUFFIX="arm64" ;;
-  *)      ARCH_SUFFIX="${ARCH}" ;;
-esac
+export PATH="/opt/homebrew/opt/qt@6/bin:/opt/homebrew/bin:/usr/local/opt/qt@6/bin:/usr/local/bin:${PATH}"
+setup_qt_path
+read_version
+detect_arch
 
 echo "==> Building ${APP_NAME} ${RELEASE_VERSION} for macOS ${ARCH_SUFFIX}"
+make_icons
+[ -f "${ROOT}/I2PTorrents.icns" ] || die "I2PTorrents.icns was not created (need sips + iconutil)"
 
-if [ -n "${I2PTORRENTS_PYTHON:-}" ]; then
-  PYTHON_BIN="${I2PTORRENTS_PYTHON}"
-elif command -v python3 >/dev/null 2>&1; then
-  PYTHON_BIN="python3"
-else
-  echo "ERROR: python3 not found" >&2
-  exit 1
+echo "==> Building release binary"
+"${ROOT}/scripts/cargo-qt.sh" build --release --features gui
+BIN="${ROOT}/target/release/${CARGO_BIN}"
+[ -x "${BIN}" ] || die "missing binary ${BIN}"
+if command -v strip >/dev/null 2>&1; then
+  strip -x "${BIN}" || true
 fi
 
-if [ ! -x "${VENV_DIR}/bin/python" ]; then
-  echo "==> Creating ${VENV_DIR}"
-  "${PYTHON_BIN}" -m venv "${VENV_DIR}"
-fi
-PYTHON_CMD="${VENV_DIR}/bin/python"
+APP_DIR="${ROOT}/dist/${APP_NAME}.app"
+MACOS_DIR="${APP_DIR}/Contents/MacOS"
+RES_DIR="${APP_DIR}/Contents/Resources"
+echo "==> Wrapping ${APP_DIR}"
+rm -rf "${APP_DIR}"
+mkdir -p "${MACOS_DIR}" "${RES_DIR}"
+cp "${BIN}" "${MACOS_DIR}/${APP_NAME}"
+chmod +x "${MACOS_DIR}/${APP_NAME}"
+cp "${ROOT}/I2PTorrents.icns" "${RES_DIR}/I2PTorrents.icns"
+copy_runtime_files "${RES_DIR}"
 
-echo "==> Installing build dependencies"
-"${PYTHON_CMD}" -m pip install -U pip
-"${PYTHON_CMD}" -m pip install -e . pyinstaller pillow
-
-echo "==> Generating icons from image.png"
-"${PYTHON_CMD}" make_icon.py
-
-echo "==> Building onedir (PyInstaller)"
-rm -rf "dist/${APP_NAME}" "build/${APP_NAME}"
-"${PYTHON_CMD}" -m PyInstaller --clean -y I2PTorrents.spec
-
-echo "==> Wrapping dist/${APP_NAME}.app"
-rm -rf "dist/${APP_NAME}.app"
-mkdir -p "dist/${APP_NAME}.app/Contents/MacOS" "dist/${APP_NAME}.app/Contents/Resources"
-cp -R "dist/${APP_NAME}" "dist/${APP_NAME}.app/Contents/Resources/${APP_NAME}"
-if [ -f "I2PTorrents.icns" ]; then
-  cp "I2PTorrents.icns" "dist/${APP_NAME}.app/Contents/Resources/I2PTorrents.icns"
-else
-  echo "WARNING: I2PTorrents.icns not found, using icon.png"
-  cp "icon.png" "dist/${APP_NAME}.app/Contents/Resources/I2PTorrents.icns"
-fi
-# Finder кэширует иконку бандла; mtime .app сбрасывает подложку от старого icns.
-touch "dist/${APP_NAME}.app" "dist/${APP_NAME}.app/Contents/Info.plist"
-printf '%s\n' '#!/bin/sh' "exec \"\$(dirname \"\$0\")/../Resources/${APP_NAME}/${APP_NAME}\" \"\$@\"" \
-  > "dist/${APP_NAME}.app/Contents/MacOS/${APP_NAME}"
-chmod +x "dist/${APP_NAME}.app/Contents/MacOS/${APP_NAME}"
-chmod +x "dist/${APP_NAME}.app/Contents/Resources/${APP_NAME}/${APP_NAME}"
-
-cat > "dist/${APP_NAME}.app/Contents/Info.plist" <<PLIST
+cat > "${APP_DIR}/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
 	<key>CFBundleDisplayName</key>
-	<string>I2P Torrents</string>
+	<string>${APP_DISPLAY_NAME}</string>
 	<key>CFBundleExecutable</key>
 	<string>${APP_NAME}</string>
 	<key>CFBundleIconFile</key>
 	<string>I2PTorrents.icns</string>
 	<key>CFBundleIdentifier</key>
-	<string>org.metanoicarmor.i2ptorrents</string>
+	<string>${APP_ID}</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
 	<key>CFBundleName</key>
-	<string>I2P Torrents</string>
+	<string>${APP_DISPLAY_NAME}</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
 	<string>${RELEASE_VERSION}</string>
 	<key>CFBundleVersion</key>
 	<string>${RELEASE_VERSION}</string>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.utilities</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>11.0</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSSupportsAutomaticGraphicsSwitching</key>
+	<true/>
 </dict>
 </plist>
 PLIST
+touch "${APP_DIR}" "${APP_DIR}/Contents/Info.plist"
 
-ZIP_FILE="${APP_NAME}-macOS-${ARCH_SUFFIX}-v${RELEASE_VERSION}.zip"
+MACDEPLOYQT="$(command -v macdeployqt || true)"
+if [ -z "${MACDEPLOYQT}" ]; then
+  for candidate in /opt/homebrew/opt/qt@6/bin/macdeployqt /usr/local/opt/qt@6/bin/macdeployqt; do
+    if [ -x "${candidate}" ]; then
+      MACDEPLOYQT="${candidate}"
+      break
+    fi
+  done
+fi
+[ -n "${MACDEPLOYQT}" ] || die "macdeployqt not found (brew install qt@6)"
+
+echo "==> Bundling Qt with macdeployqt"
+QT_LIBS=""
+if command -v qmake6 >/dev/null 2>&1; then
+  QT_LIBS="$(qmake6 -query QT_INSTALL_LIBS 2>/dev/null || true)"
+elif command -v qmake >/dev/null 2>&1; then
+  QT_LIBS="$(qmake -query QT_INSTALL_LIBS 2>/dev/null || true)"
+fi
+DEPLOY_ARGS=("${APP_DIR}" -always-overwrite)
+if [ -n "${QT_LIBS}" ] && [ -d "${QT_LIBS}" ]; then
+  export DYLD_FRAMEWORK_PATH="${QT_LIBS}${DYLD_FRAMEWORK_PATH:+:${DYLD_FRAMEWORK_PATH}}"
+  DEPLOY_ARGS+=(-libpath="${QT_LIBS}")
+  # Homebrew macdeployqt resolves plugin @rpath against <appdir>/../lib
+  ln -sfn "${QT_LIBS}" "${ROOT}/dist/lib"
+fi
+"${MACDEPLOYQT}" "${DEPLOY_ARGS[@]}"
+rm -f "${ROOT}/dist/lib"
+
+if command -v xattr >/dev/null 2>&1; then
+  xattr -cr "${APP_DIR}"
+fi
+if command -v codesign >/dev/null 2>&1; then
+  echo "==> Ad-hoc codesign"
+  codesign --force --deep --sign - "${APP_DIR}"
+fi
+
+ZIP_FILE="${ROOT}/${APP_NAME}-macOS-${ARCH_SUFFIX}-v${RELEASE_VERSION}.zip"
 rm -f "${ZIP_FILE}"
-ditto -c -k --sequesterRsrc --keepParent "dist/${APP_NAME}.app" "${ZIP_FILE}"
+ditto -c -k --sequesterRsrc --keepParent "${APP_DIR}" "${ZIP_FILE}"
 
 echo
-echo "✔ GUI: dist/${APP_NAME}.app"
+echo "✔ GUI: ${APP_DIR}"
 echo "✔ Packed ${ZIP_FILE}"
