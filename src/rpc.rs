@@ -34,10 +34,9 @@ pub const FIELDS: &[&str] = &[
     "totalSize",
     "hashString",
     "pieces",
-    "files",
-    "wanted",
-    "priorities",
 ];
+
+pub const FILE_FIELDS: &[&str] = &["id", "files", "wanted", "priorities"];
 
 const MAX_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
 
@@ -203,16 +202,7 @@ impl<T: RpcTransport> TransmissionRPC<T> {
                 )));
             }
         }
-        let result = obj
-            .get("arguments")
-            .cloned()
-            .or_else(|| obj.get("result").cloned())
-            .unwrap_or(json!({}));
-        Ok(if result.is_object() {
-            result
-        } else {
-            json!({})
-        })
+        Ok(rpc_arguments(obj))
     }
 
     pub fn get_torrents(&self, detailed: bool) -> Result<Vec<Torrent>, RpcError> {
@@ -226,11 +216,22 @@ impl<T: RpcTransport> TransmissionRPC<T> {
                 .collect()
         };
         let result = self.call("torrent-get", json!({ "fields": fields }))?;
-        let rows = result
-            .get("torrents")
-            .and_then(Value::as_array)
-            .ok_or_else(|| RpcError(t("rpc_bad_list")))?;
-        Ok(rows.iter().filter_map(Torrent::from_rpc).collect())
+        torrent_rows(&result)
+    }
+
+    pub fn get_torrent_files(
+        &self,
+        torrent_id: i64,
+    ) -> Result<Vec<crate::models::TorrentFile>, RpcError> {
+        let result = self.call(
+            "torrent-get",
+            json!({ "ids": [torrent_id], "fields": FILE_FIELDS }),
+        )?;
+        Ok(torrent_rows(&result)?
+            .into_iter()
+            .next()
+            .map(|torrent| torrent.files)
+            .unwrap_or_default())
     }
 
     pub fn add_torrent_bytes(&self, content: &[u8]) -> Result<Value, RpcError> {
@@ -288,6 +289,24 @@ impl<T: RpcTransport> TransmissionRPC<T> {
 pub fn rpc_method_unsupported(message: &str) -> bool {
     let lower = message.to_ascii_lowercase();
     lower.contains("method not found") || lower.contains("-32601")
+}
+
+fn rpc_arguments(obj: &serde_json::Map<String, Value>) -> Value {
+    if let Some(arguments) = obj.get("arguments").filter(|value| value.is_object()) {
+        return arguments.clone();
+    }
+    match obj.get("result") {
+        Some(Value::Object(_)) => obj["result"].clone(),
+        _ => json!({}),
+    }
+}
+
+fn torrent_rows(result: &Value) -> Result<Vec<Torrent>, RpcError> {
+    let rows = result
+        .get("torrents")
+        .and_then(Value::as_array)
+        .ok_or_else(|| RpcError(t("rpc_bad_list")))?;
+    Ok(rows.iter().filter_map(Torrent::from_rpc).collect())
 }
 
 use std::io::Read;

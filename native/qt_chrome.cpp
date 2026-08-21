@@ -16,7 +16,9 @@
 #include <QEvent>
 #include <QFont>
 #include <QFontMetrics>
+#include <QEventLoop>
 #include <QFrame>
+#include <climits>
 #include <QGuiApplication>
 #include <QHBoxLayout>
 #include <QHeaderView>
@@ -57,6 +59,7 @@
 #include <QStyleOptionViewItem>
 #include <QTableWidget>
 #include <QTableWidgetItem>
+#include <QTextDocument>
 #include <QTextLayout>
 #include <QTextLine>
 #include <QTextOption>
@@ -85,6 +88,224 @@ namespace {
 QWidget *as_widget(void *ptr) { return static_cast<QWidget *>(ptr); }
 
 QString qstr(const char *text) { return QString::fromUtf8(text ? text : ""); }
+
+void update_popup_rounded_mask(QWidget *widget, qreal radius);
+
+void apply_real_dialog_window(QDialog *dialog) {
+    if (dialog == nullptr) {
+        return;
+    }
+    Qt::WindowFlags flags = Qt::Dialog | Qt::WindowTitleHint | Qt::WindowSystemMenuHint |
+                            Qt::WindowCloseButtonHint;
+    dialog->setWindowFlags(flags);
+    dialog->setModal(true);
+    dialog->setWindowModality(Qt::ApplicationModal);
+    dialog->setSizeGripEnabled(false);
+}
+
+struct DialogMetrics {
+    static constexpr int kAboutW = 460;
+    static constexpr int kSettingsW = 520;
+    static constexpr int kSettingsH = 520;
+    static constexpr int kFilesW = 640;
+    static constexpr int kFilesH = 460;
+    static constexpr int kButtonRowTop = 8;
+    static constexpr int kButtonGap = 8;
+    static constexpr int kQrSide = 160;
+    static constexpr int kFilesHeaderMinH = 32;
+    static constexpr int kFilesProgressPad = 20;
+    static constexpr int kFilesPriorityPad = 56;
+    static constexpr int kFilesPriorityCellPad = 8;
+
+    static QMargins dialog_margins(int top = 16, int bottom = 16) {
+        return QMargins(18, top, 18, bottom);
+    }
+
+    static int inner_w(int dialog_w, const QMargins &margins) {
+        return dialog_w - margins.left() - margins.right();
+    }
+};
+
+int wrapped_label_height(const QLabel *label, int width) {
+    if (label == nullptr || width <= 0) {
+        return 0;
+    }
+    if (label->textFormat() == Qt::RichText ||
+        (label->textFormat() == Qt::AutoText && label->text().contains(QLatin1Char('<')))) {
+        QTextDocument doc;
+        doc.setDefaultFont(label->font());
+        doc.setHtml(label->text());
+        doc.setTextWidth(width);
+        return static_cast<int>(std::ceil(doc.size().height()));
+    }
+    const QFontMetrics metrics(label->font());
+    return metrics.boundingRect(QRect(0, 0, width, INT_MAX), Qt::TextWordWrap | Qt::AlignLeft, label->text())
+        .height();
+}
+
+void add_dialog_buttons(QVBoxLayout *layout, std::initializer_list<QPushButton *> buttons) {
+    auto *row = new QHBoxLayout();
+    row->setContentsMargins(0, DialogMetrics::kButtonRowTop, 0, 0);
+    row->setSpacing(DialogMetrics::kButtonGap);
+    row->addStretch(1);
+    for (QPushButton *button : buttons) {
+        row->addWidget(button);
+    }
+    layout->addLayout(row);
+}
+
+int dialog_buttons_row_height(const QPushButton *button) {
+    if (button == nullptr) {
+        return DialogMetrics::kButtonRowTop;
+    }
+    return DialogMetrics::kButtonRowTop + button->sizeHint().height();
+}
+
+bool is_table_descendant(const QWidget *widget) {
+    for (const QWidget *parent = widget != nullptr ? widget->parentWidget() : nullptr; parent != nullptr;
+         parent = parent->parentWidget()) {
+        if (qobject_cast<const QTableWidget *>(parent) != nullptr) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void polish_dialog_tree(QDialog *dialog) {
+    if (dialog == nullptr) {
+        return;
+    }
+    dialog->ensurePolished();
+    for (QWidget *child : dialog->findChildren<QWidget *>()) {
+        child->ensurePolished();
+    }
+}
+
+void measure_and_lock_dialog(QDialog *dialog, int wrapped_inner_w) {
+    if (dialog == nullptr) {
+        return;
+    }
+    polish_dialog_tree(dialog);
+    for (QLabel *label : dialog->findChildren<QLabel *>()) {
+        if (is_table_descendant(label) || !label->wordWrap()) {
+            continue;
+        }
+        label->setFixedWidth(wrapped_inner_w);
+    }
+    for (QLabel *label : dialog->findChildren<QLabel *>()) {
+        if (is_table_descendant(label)) {
+            continue;
+        }
+        if (label->wordWrap()) {
+            label->setFixedWidth(wrapped_inner_w);
+            int height = label->heightForWidth(wrapped_inner_w);
+            if (height <= 0) {
+                height = wrapped_label_height(label, wrapped_inner_w);
+            }
+            if (height > 0) {
+                label->setFixedHeight(height);
+            }
+            continue;
+        }
+        if (const QPixmap pixmap = label->pixmap(); !pixmap.isNull()) {
+            label->setFixedSize(label->sizeHint());
+            continue;
+        }
+        label->setFixedHeight(label->sizeHint().height());
+    }
+    for (QPushButton *button : dialog->findChildren<QPushButton *>()) {
+        if (is_table_descendant(button)) {
+            continue;
+        }
+        button->setFixedSize(button->sizeHint());
+    }
+    for (QComboBox *combo : dialog->findChildren<QComboBox *>()) {
+        combo->adjustSize();
+        if (is_table_descendant(combo)) {
+            combo->setFixedHeight(combo->sizeHint().height());
+            continue;
+        }
+        combo->setFixedSize(combo->sizeHint());
+    }
+    for (QAbstractSpinBox *spin : dialog->findChildren<QAbstractSpinBox *>()) {
+        spin->setFixedHeight(spin->sizeHint().height());
+    }
+    for (QLineEdit *edit : dialog->findChildren<QLineEdit *>()) {
+        edit->setFixedHeight(edit->sizeHint().height());
+    }
+}
+
+void layout_files_table(QTableWidget *table, QVBoxLayout *layout, int dialog_w, int dialog_h, QLabel *note,
+                        int button_row_h, const QString &progress_header);
+
+void center_dialog_on(QDialog *dialog, QWidget *host, const QSize &size) {
+    if (dialog == nullptr || host == nullptr) {
+        return;
+    }
+    const QRect frame = host->frameGeometry();
+    const int x = frame.x() + std::max(0, (frame.width() - size.width()) / 2);
+    const int y = frame.y() + std::max(0, (frame.height() - size.height()) / 2);
+    dialog->move(x, y);
+}
+
+QSize modal_dialog_size(QDialog *dialog, const QSize &fixed_size) {
+    if (dialog == nullptr) {
+        return fixed_size;
+    }
+    QLayout *layout = dialog->layout();
+    if (layout == nullptr) {
+        return fixed_size;
+    }
+    layout->setSizeConstraint(QLayout::SetFixedSize);
+    layout->setAlignment(Qt::AlignTop);
+    layout->activate();
+    const QSize content = layout->minimumSize();
+    const int width = fixed_size.isValid() && fixed_size.width() > 0
+                          ? fixed_size.width()
+                          : std::max(dialog->minimumWidth(), content.width());
+    const int height =
+        fixed_size.isValid() && fixed_size.height() > 0 ? fixed_size.height() : content.height();
+    return QSize(width, height);
+}
+
+void exec_app_modal_dialog(QDialog *dialog, QWidget *host, int wrapped_inner_w, const QSize &fixed_size,
+                            const std::function<void()> &finalize = {}) {
+    if (dialog == nullptr) {
+        return;
+    }
+
+    dialog->setAttribute(Qt::WA_DontShowOnScreen, true);
+    dialog->show();
+    QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+
+    measure_and_lock_dialog(dialog, wrapped_inner_w);
+    if (finalize) {
+        finalize();
+    }
+
+    QSize size = modal_dialog_size(dialog, fixed_size);
+    if (size.width() <= 0 || size.height() <= 0) {
+        size = dialog->sizeHint().expandedTo(QSize(240, 120));
+    }
+
+#ifdef Q_OS_MAC
+    if (!(fixed_size.isValid() && fixed_size.height() > 0)) {
+        dialog->resize(size);
+        QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+        const QSize frame = dialog->frameGeometry().size();
+        if (frame.width() > 0 && frame.height() > 0) {
+            size = frame;
+        }
+    }
+#endif
+
+    dialog->setFixedSize(size);
+    center_dialog_on(dialog, host, size);
+
+    dialog->hide();
+    dialog->setAttribute(Qt::WA_DontShowOnScreen, false);
+    dialog->exec();
+}
 
 void disable_dwm_rounded_frame(QWidget *widget) {
 #ifdef Q_OS_WIN
@@ -981,6 +1202,88 @@ private:
     static constexpr int pad_y_ = 8;
 };
 
+void layout_files_table(QTableWidget *table, QVBoxLayout *layout, int dialog_w, int dialog_h, QLabel *note,
+                        int button_row_h, const QString &progress_header) {
+    if (table == nullptr || layout == nullptr || note == nullptr) {
+        return;
+    }
+    const QMargins margins = layout->contentsMargins();
+    const int inner_w = DialogMetrics::inner_w(dialog_w, margins);
+    const int spacing = layout->spacing();
+
+    note->setFixedWidth(inner_w);
+    int note_h = note->heightForWidth(inner_w);
+    if (note_h <= 0) {
+        note_h = wrapped_label_height(note, inner_w);
+    }
+    if (note_h > 0) {
+        note->setFixedHeight(note_h);
+    }
+
+    const int chrome_h = margins.top() + margins.bottom() + note_h + button_row_h + spacing * 2;
+    const int max_dialog_h = dialog_h > 0 ? dialog_h : DialogMetrics::kFilesH;
+    const int max_table_h = std::max(120, max_dialog_h - chrome_h);
+
+    QHeaderView *header = table->horizontalHeader();
+    header->setHighlightSections(false);
+    header->setFixedHeight(std::max(DialogMetrics::kFilesHeaderMinH, header->sizeHint().height()));
+    const int header_h = header->height();
+
+    const int table_inner = std::max(80, inner_w - table->frameWidth() * 2);
+
+    table->resizeColumnToContents(1);
+    const int col_size = table->columnWidth(1);
+
+    const QFontMetrics metrics(table->font());
+    const int col_progress = std::max(metrics.horizontalAdvance(QStringLiteral("100%")),
+                                      metrics.horizontalAdvance(progress_header)) +
+                             DialogMetrics::kFilesProgressPad;
+
+    int col_priority = 0;
+    for (int row = 0; row < table->rowCount(); ++row) {
+        if (QWidget *cell = table->cellWidget(row, 3)) {
+            if (QComboBox *combo = cell->findChild<QComboBox *>()) {
+                col_priority =
+                    std::max(col_priority, combo->sizeHint().width() + DialogMetrics::kFilesPriorityCellPad);
+            }
+        }
+    }
+    col_priority = std::max(col_priority, metrics.horizontalAdvance(progress_header) + DialogMetrics::kFilesPriorityPad);
+
+    table->setColumnWidth(1, col_size);
+    table->setColumnWidth(2, col_progress);
+    table->setColumnWidth(3, col_priority);
+
+    const int scrollbar_w = table->style()->pixelMetric(QStyle::PM_ScrollBarExtent, nullptr, table);
+    auto set_name_column = [&](int reserve_scrollbar) {
+        const int name_w =
+            std::max(80, table_inner - col_size - col_progress - col_priority - reserve_scrollbar);
+        table->setColumnWidth(0, name_w);
+        for (int row = 0; row < table->rowCount(); ++row) {
+            QWidget *cell = table->cellWidget(row, 0);
+            if (cell != nullptr && cell->objectName() == QLatin1String("FilesName")) {
+                table->setRowHeight(row, static_cast<FilesNameLabel *>(cell)->heightForWidth(name_w));
+            }
+        }
+    };
+
+    set_name_column(0);
+    int rows_h = 0;
+    for (int row = 0; row < table->rowCount(); ++row) {
+        rows_h += table->rowHeight(row);
+    }
+
+    const int content_table_h = header_h + rows_h;
+    const bool need_scroll = content_table_h > max_table_h;
+    const int table_h = need_scroll ? max_table_h : content_table_h;
+    table->setFixedSize(inner_w, table_h);
+    table->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    table->setVerticalScrollBarPolicy(need_scroll ? Qt::ScrollBarAsNeeded : Qt::ScrollBarAlwaysOff);
+    if (need_scroll) {
+        set_name_column(scrollbar_w);
+    }
+}
+
 class CardClickFilter final : public QObject {
 public:
     CardClickFilter(QWidget *target, i2p_void_cb cb, void *ctx) : QObject(target), cb_(cb), ctx_(ctx) {
@@ -1463,15 +1766,7 @@ void i2p_widget_set_stylesheet(void *widget, const char *css) {
 void *i2p_dialog_new(void *parent, const char *title, int w, int h) {
     auto *dialog = new QDialog(as_widget(parent));
     dialog->setWindowTitle(qstr(title));
-    // A QWidget parent (not QMainWindow) becomes a macOS sheet that often
-    // never appears. Force a real dialog window and application modality.
-    Qt::WindowFlags flags = Qt::Dialog | Qt::WindowTitleHint | Qt::WindowSystemMenuHint |
-                            Qt::WindowCloseButtonHint;
-#ifdef Q_OS_MAC
-    flags |= Qt::Window;
-#endif
-    dialog->setWindowFlags(flags);
-    dialog->setWindowModality(Qt::ApplicationModal);
+    apply_real_dialog_window(dialog);
     dialog->setMinimumSize(w, h);
     dialog->resize(w, h);
     return dialog;
@@ -1706,18 +2001,19 @@ int i2p_settings_exec(void *parent, const i2p_settings_in *in) {
     if (in == nullptr) {
         return 0;
     }
-    QDialog dialog(as_widget(parent));
+    QWidget *host = as_widget(parent);
+    QDialog dialog(host);
+    apply_real_dialog_window(&dialog);
     dialog.setWindowTitle(qstr(in->title));
-    dialog.setModal(true);
-    dialog.setWindowModality(Qt::WindowModal);
-    dialog.setMinimumSize(520, 480);
-    dialog.resize(520, 520);
     if (in->stylesheet && in->stylesheet[0] != '\0') {
         dialog.setStyleSheet(qstr(in->stylesheet));
     }
 
+    const QMargins margins = DialogMetrics::dialog_margins(18, 18);
+    const int inner_w = DialogMetrics::inner_w(DialogMetrics::kSettingsW, margins);
+
     auto *layout = new QVBoxLayout(&dialog);
-    layout->setContentsMargins(18, 18, 18, 18);
+    layout->setContentsMargins(margins);
     layout->setSpacing(8);
 
     layout->addWidget(new QLabel(qstr(in->rpc_label), &dialog));
@@ -1771,21 +2067,17 @@ int i2p_settings_exec(void *parent, const i2p_settings_in *in) {
     layout->addWidget(note);
     layout->addStretch(1);
 
-    auto *buttons = new QWidget(&dialog);
-    auto *button_row = new QHBoxLayout(buttons);
-    button_row->setContentsMargins(0, 8, 0, 0);
-    button_row->addStretch(1);
-    auto *cancel = new QPushButton(qstr(in->cancel), buttons);
-    auto *save = new QPushButton(qstr(in->save), buttons);
+    auto *cancel = new QPushButton(qstr(in->cancel), &dialog);
+    auto *save = new QPushButton(qstr(in->save), &dialog);
     save->setObjectName(QStringLiteral("Primary"));
     save->setDefault(true);
     QObject::connect(cancel, &QPushButton::clicked, &dialog, &QDialog::reject);
     QObject::connect(save, &QPushButton::clicked, &dialog, &QDialog::accept);
-    button_row->addWidget(cancel);
-    button_row->addWidget(save);
-    layout->addWidget(buttons);
+    add_dialog_buttons(layout, {cancel, save});
 
-    if (dialog.exec() != QDialog::Accepted) {
+    exec_app_modal_dialog(&dialog, host, inner_w,
+                          QSize(DialogMetrics::kSettingsW, DialogMetrics::kSettingsH));
+    if (dialog.result() != QDialog::Accepted) {
         return 0;
     }
     g_settings_rpc = rpc->text().toStdString();
@@ -1818,19 +2110,19 @@ void i2p_about_exec(void *parent, const i2p_about_in *in) {
     if (in == nullptr) {
         return;
     }
-    QDialog dialog(as_widget(parent));
+    QWidget *host = as_widget(parent);
+    QDialog dialog(host);
+    apply_real_dialog_window(&dialog);
     dialog.setWindowTitle(qstr(in->title));
-    dialog.setModal(true);
-    dialog.setWindowModality(Qt::WindowModal);
-    dialog.setMinimumWidth(440);
+    dialog.setMinimumWidth(DialogMetrics::kAboutW);
     if (in->stylesheet && in->stylesheet[0] != '\0') {
         dialog.setStyleSheet(qstr(in->stylesheet));
     }
-
+    const QMargins margins = DialogMetrics::dialog_margins(16, 16);
+    const int inner_w = DialogMetrics::inner_w(DialogMetrics::kAboutW, margins);
     auto *layout = new QVBoxLayout(&dialog);
-    layout->setContentsMargins(18, 16, 18, 16);
+    layout->setContentsMargins(margins);
     layout->setSpacing(8);
-    layout->setSizeConstraint(QLayout::SetFixedSize);
 
     auto *heading = new QLabel(qstr(in->heading), &dialog);
     heading->setObjectName(QStringLiteral("Title"));
@@ -1845,6 +2137,7 @@ void i2p_about_exec(void *parent, const i2p_about_in *in) {
     github->setObjectName(QStringLiteral("AboutLink"));
     github->setOpenExternalLinks(true);
     github->setTextInteractionFlags(Qt::TextBrowserInteraction);
+    github->setWordWrap(true);
     github->setText(QStringLiteral("%1: <a href=\"%2\">%2</a>")
                         .arg(qstr(in->github_label).toHtmlEscaped(), qstr(in->github_url).toHtmlEscaped()));
     layout->addWidget(github);
@@ -1859,7 +2152,8 @@ void i2p_about_exec(void *parent, const i2p_about_in *in) {
         if (!qr.isNull()) {
             auto *qr_label = new QLabel(&dialog);
             qr_label->setAlignment(Qt::AlignCenter);
-            qr_label->setPixmap(qr.scaled(160, 160, Qt::KeepAspectRatio, Qt::SmoothTransformation));
+            qr_label->setPixmap(qr.scaled(DialogMetrics::kQrSide, DialogMetrics::kQrSide, Qt::KeepAspectRatio,
+                                          Qt::SmoothTransformation));
             layout->addWidget(qr_label, 0, Qt::AlignHCenter);
         }
     }
@@ -1875,9 +2169,9 @@ void i2p_about_exec(void *parent, const i2p_about_in *in) {
     ok->setObjectName(QStringLiteral("Primary"));
     ok->setDefault(true);
     QObject::connect(ok, &QPushButton::clicked, &dialog, &QDialog::accept);
-    layout->addWidget(ok, 0, Qt::AlignRight);
+    add_dialog_buttons(layout, {ok});
 
-    dialog.exec();
+    exec_app_modal_dialog(&dialog, host, inner_w, QSize(DialogMetrics::kAboutW, 0));
 }
 
 static int file_combo_index(int wanted, int priority) {
@@ -1897,18 +2191,17 @@ void i2p_files_exec(void *parent, const i2p_files_in *in, i2p_file_change_cb cb,
     if (in == nullptr) {
         return;
     }
-    QDialog dialog(as_widget(parent));
+    QWidget *host = as_widget(parent);
+    QDialog dialog(host);
+    apply_real_dialog_window(&dialog);
     dialog.setWindowTitle(qstr(in->title));
-    dialog.setModal(true);
-    dialog.setWindowModality(Qt::WindowModal);
-    dialog.setMinimumSize(560, 380);
-    dialog.resize(640, 460);
     if (in->stylesheet && in->stylesheet[0] != '\0') {
         dialog.setStyleSheet(qstr(in->stylesheet));
     }
-
+    const QMargins margins = DialogMetrics::dialog_margins(16, 16);
+    const int inner_w = DialogMetrics::inner_w(DialogMetrics::kFilesW, margins);
     auto *layout = new QVBoxLayout(&dialog);
-    layout->setContentsMargins(18, 16, 18, 16);
+    layout->setContentsMargins(margins);
     layout->setSpacing(10);
 
     auto *note = new QLabel(qstr(in->note), &dialog);
@@ -1916,11 +2209,14 @@ void i2p_files_exec(void *parent, const i2p_files_in *in, i2p_file_change_cb cb,
     note->setWordWrap(true);
     layout->addWidget(note);
 
+    QTableWidget *files_table = nullptr;
+    std::vector<QComboBox *> combos;
+
     if (in->file_count <= 0) {
         auto *empty = new QLabel(qstr(in->empty), &dialog);
         empty->setObjectName(QStringLiteral("Secondary"));
         empty->setWordWrap(true);
-        layout->addWidget(empty, 1);
+        layout->addWidget(empty);
     } else {
         auto *table = new QTableWidget(in->file_count, 4, &dialog);
         table->setObjectName(QStringLiteral("FilesTable"));
@@ -1932,10 +2228,11 @@ void i2p_files_exec(void *parent, const i2p_files_in *in, i2p_file_change_cb cb,
         table->setFocusPolicy(Qt::NoFocus);
         table->setEditTriggers(QAbstractItemView::NoEditTriggers);
         table->setAlternatingRowColors(true);
+        table->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
         table->horizontalHeader()->setMinimumSectionSize(28);
         table->horizontalHeader()->setStretchLastSection(false);
-        table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
-        table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+        table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Fixed);
+        table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Fixed);
         table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
         table->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Fixed);
         table->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
@@ -1949,7 +2246,7 @@ void i2p_files_exec(void *parent, const i2p_files_in *in, i2p_file_change_cb cb,
             priority_text_w = std::max(priority_text_w, metrics.horizontalAdvance(label));
         }
 
-        std::vector<QComboBox *> combos;
+        files_table = table;
         combos.reserve(static_cast<size_t>(in->file_count));
         for (int row = 0; row < in->file_count; ++row) {
             const i2p_file_row &file = in->files[row];
@@ -1975,7 +2272,7 @@ void i2p_files_exec(void *parent, const i2p_files_in *in, i2p_file_change_cb cb,
             combo->addItem(priority_labels[2], 0);
             combo->addItem(priority_labels[3], 1);
             combo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
-            combo->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
+            combo->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
             combo->setMinimumWidth(priority_text_w + 48);
             combo->setToolTip(tip);
             const int start = file_combo_index(file.wanted, file.priority);
@@ -1993,29 +2290,6 @@ void i2p_files_exec(void *parent, const i2p_files_in *in, i2p_file_change_cb cb,
             table->setCellWidget(row, 3, priority_cell);
             combos.push_back(combo);
         }
-
-        table->setColumnWidth(2, std::max(metrics.horizontalAdvance(QStringLiteral("100%")),
-                                          metrics.horizontalAdvance(qstr(in->col_progress))) +
-                                     20);
-        table->setColumnWidth(3, priority_text_w + 56);
-
-        auto relayout_rows = [table] {
-            for (int row = 0; row < table->rowCount(); ++row) {
-                QWidget *cell = table->cellWidget(row, 0);
-                if (cell == nullptr || cell->objectName() != QLatin1String("FilesName")) {
-                    continue;
-                }
-                const int name_w = cell->width() > 1 ? cell->width() : std::max(1, table->columnWidth(0));
-                table->setRowHeight(row, static_cast<FilesNameLabel *>(cell)->heightForWidth(name_w));
-            }
-        };
-        QObject::connect(table->horizontalHeader(), &QHeaderView::sectionResized, table,
-                         [relayout_rows](int index, int, int) {
-                             if (index == 0) {
-                                 relayout_rows();
-                             }
-                         });
-        QTimer::singleShot(0, table, relayout_rows);
 
         const QString unsupported = qstr(in->unsupported_note);
         for (QComboBox *combo : combos) {
@@ -2047,7 +2321,7 @@ void i2p_files_exec(void *parent, const i2p_files_in *in, i2p_file_change_cb cb,
                                  }
                              });
         }
-        layout->addWidget(table, 1);
+        layout->addWidget(table);
     }
 
     auto *close = new QPushButton(qstr(in->close), &dialog);
@@ -2059,9 +2333,16 @@ void i2p_files_exec(void *parent, const i2p_files_in *in, i2p_file_change_cb cb,
         }
         QTimer::singleShot(0, &dialog, &QDialog::accept);
     });
-    layout->addWidget(close, 0, Qt::AlignRight);
+    add_dialog_buttons(layout, {close});
 
-    dialog.exec();
+    exec_app_modal_dialog(
+        &dialog, host, inner_w, QSize(DialogMetrics::kFilesW, 0),
+        [&] {
+            if (files_table != nullptr) {
+                layout_files_table(files_table, layout, DialogMetrics::kFilesW, 0, note,
+                                   dialog_buttons_row_height(close), qstr(in->col_progress));
+            }
+        });
     if (g_tip) {
         g_tip->forceHide();
     }
@@ -2077,7 +2358,9 @@ void i2p_defer(i2p_void_cb cb, void *ctx) {
 
 int i2p_confirm_remove(void *parent, const char *title, const char *text, const char *checkbox,
                        const char *yes_label, const char *cancel_label, int *delete_data) {
-    QMessageBox box(as_widget(parent));
+    QWidget *host = as_widget(parent);
+    QMessageBox box(host);
+    apply_real_dialog_window(&box);
     box.setWindowTitle(qstr(title));
     box.setText(qstr(text));
     auto *check = new QCheckBox(qstr(checkbox), &box);

@@ -83,7 +83,7 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
 QCheckBox { spacing: 8px; }
 QTableWidget#FilesTable {
-    background: #ffffff; border: none; border-radius: 10px; gridline-color: transparent;
+    background: #ffffff; border: none; gridline-color: transparent;
     alternate-background-color: #f4f6fa;
 }
 QTableWidget#FilesTable::item { padding: 6px 8px; }

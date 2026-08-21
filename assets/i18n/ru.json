@@ -55,6 +55,8 @@
   "download_progress": "Прогресс загрузки",
   "peers": "Пиры: {down}↓ {up}↑",
   "progress_of": "{percent:.1f}% · {done} из {total}",
+  "progress_percent": "{percent}%",
+  "progress_size": "{done} из {total}",
   "pieces_meta": "{count} кусков × {size}",
   "pieces_tooltip": "Куски: {have} из {total}",
   "settings_title": "Настройки",

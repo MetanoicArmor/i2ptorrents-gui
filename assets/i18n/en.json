@@ -55,6 +55,8 @@
   "download_progress": "Download progress",
   "peers": "Peers: {down}↓ {up}↑",
   "progress_of": "{percent:.1f}% · {done} of {total}",
+  "progress_percent": "{percent}%",
+  "progress_size": "{done} of {total}",
   "pieces_meta": "{count} pieces × {size}",
   "pieces_tooltip": "Pieces: {have} of {total}",
   "settings_title": "Settings",

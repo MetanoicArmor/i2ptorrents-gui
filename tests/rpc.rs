@@ -1,7 +1,9 @@
 use std::sync::{Arc, Mutex};
 
 use base64::Engine;
-use i2ptorrents_gui::rpc::{normalize_rpc_url, RpcError, RpcTransport, TransmissionRPC, FIELDS};
+use i2ptorrents_gui::rpc::{
+    normalize_rpc_url, RpcError, RpcTransport, TransmissionRPC, FILE_FIELDS, FIELDS,
+};
 use serde_json::{json, Value};
 
 struct MockTransport {
@@ -69,6 +71,7 @@ fn get_torrents_accepts_i2pd_result_shape() {
     assert_eq!(torrent.name, "Example");
     assert!((torrent.progress() - 0.75).abs() < f64::EPSILON);
     assert!(FIELDS.contains(&"pieces"));
+    assert!(!FIELDS.contains(&"files"));
 }
 
 #[test]
@@ -90,9 +93,71 @@ fn get_torrents_omits_pieces_in_simple_view() {
         .collect();
     assert!(!fields.contains(&"pieces"));
     assert!(fields.contains(&"hashString"));
-    assert!(fields.contains(&"files"));
-    assert!(fields.contains(&"wanted"));
-    assert!(fields.contains(&"priorities"));
+    assert!(!fields.contains(&"files"));
+    assert!(!fields.contains(&"wanted"));
+    assert!(!fields.contains(&"priorities"));
+}
+
+#[test]
+fn get_torrent_files_requests_one_torrent() {
+    let captured = Arc::new(Mutex::new(None));
+    let transport = MockTransport {
+        handler: Box::new(|_, _| {
+            json!({
+                "torrents": [{
+                    "id": 7,
+                    "files": [{"name": "a.bin", "length": 10, "bytesCompleted": 3}],
+                    "wanted": [1],
+                    "priorities": [0]
+                }]
+            })
+        }),
+        captured: captured.clone(),
+    };
+    let client = TransmissionRPC::with_transport("localhost:9191/mytorrents", transport).unwrap();
+    let files = client.get_torrent_files(7).unwrap();
+    assert_eq!(files.len(), 1);
+    assert_eq!(files[0].display_name(), "a.bin");
+    let (method, arguments) = captured.lock().unwrap().clone().unwrap();
+    assert_eq!(method, "torrent-get");
+    assert_eq!(arguments["ids"], json!([7]));
+    let fields: Vec<_> = arguments["fields"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter_map(Value::as_str)
+        .collect();
+    for field in FILE_FIELDS {
+        assert!(fields.contains(field));
+    }
+}
+
+#[test]
+fn get_torrents_accepts_jsonrpc2_result_object() {
+    struct JsonRpc2Transport;
+    impl RpcTransport for JsonRpc2Transport {
+        fn post_json(&self, _url: &str, _body: &[u8]) -> Result<Vec<u8>, RpcError> {
+            Ok(serde_json::to_vec(&json!({
+                "jsonrpc": "2.0",
+                "id": 1,
+                "result": {
+                    "torrents": [{
+                        "id": 2,
+                        "name": "JsonRpc",
+                        "status": 6,
+                        "totalSize": 50,
+                        "leftUntilDone": 0
+                    }]
+                }
+            }))
+            .unwrap())
+        }
+    }
+    let client =
+        TransmissionRPC::with_transport("localhost:9191/mytorrents", JsonRpc2Transport).unwrap();
+    let torrent = client.get_torrents(false).unwrap().remove(0);
+    assert_eq!(torrent.name, "JsonRpc");
+    assert!(torrent.finished || torrent.progress() >= 1.0);
 }
 
 #[test]

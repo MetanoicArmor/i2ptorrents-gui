@@ -9,7 +9,7 @@ use qtrs::{clipboard, desktopservices, warning, MessageBox, Spacer, SpacerExt};
 
 use crate::config::AppSettings;
 use crate::i18n::{language, set_language, t, t_args};
-use crate::models::{format_rate, progress_text, Torrent, TorrentFile, TorrentStatus};
+use crate::models::{format_bytes, format_rate, Torrent, TorrentStatus};
 use crate::qt_chrome as chrome;
 use crate::rpc::{normalize_rpc_url, rpc_method_unsupported, TransmissionRPC};
 use crate::theme::stylesheet;
@@ -533,18 +533,16 @@ fn make_card(torrent: &Torrent, downloads: &Path, detailed: bool, g: &Gui) -> Wi
     chrome::set_tooltip(&card, &t("files_tooltip"));
     let files_torrent_id = torrent.id;
     let files_name = torrent.name.clone();
-    let files = torrent.files.clone();
     let files_theme = g.settings.theme.clone();
     let files_rpc = g.settings.rpc_url.clone();
     let files_window = g.window.widget_ptr() as usize;
     chrome::on_click(&card, move || {
         let window = files_window;
         let name = files_name.clone();
-        let files = files.clone();
         let theme = files_theme.clone();
         let rpc = files_rpc.clone();
         chrome::defer(move || {
-            show_files(window, &name, files_torrent_id, &files, &theme, rpc.clone());
+            show_files(window, &name, files_torrent_id, &theme, rpc.clone());
         });
     });
     let mut root = VBoxLayout::with_parent(&card);
@@ -565,7 +563,6 @@ fn make_card(torrent: &Torrent, downloads: &Path, detailed: bool, g: &Gui) -> Wi
     let folder = downloads.to_path_buf();
     let torrent_name = torrent.name.clone();
     let torrent_id = torrent.id;
-    let torrent_files = torrent.files.clone();
     let window_ptr = g.window.widget_ptr() as usize;
     let tx = g.tx.clone();
     let rpc_url = g.settings.rpc_url.clone();
@@ -577,14 +574,12 @@ fn make_card(torrent: &Torrent, downloads: &Path, detailed: bool, g: &Gui) -> Wi
     let more_slot_hash = hash.clone();
     let more_slot_folder = folder.clone();
     let more_slot_name = torrent_name.clone();
-    let more_slot_files = torrent_files.clone();
     more.connect_clicked(move || {
         show_actions(
             &more_slot_hash,
             &more_slot_folder,
             &more_slot_name,
             torrent_id,
-            more_slot_files.clone(),
             window_ptr,
             more_ptr,
             &theme,
@@ -623,10 +618,26 @@ fn make_card(torrent: &Torrent, downloads: &Path, detailed: bool, g: &Gui) -> Wi
     let details = Widget::new().build();
     let mut detail_row = HBoxLayout::with_parent(&details);
     detail_row.set_contents_margins(0, 0, 0, 0);
-    detail_row.set_spacing(12);
-    let progress_text_label = Label::new(&progress_text(torrent)).build();
-    progress_text_label.set_object_name("Secondary");
-    detail_row.add(progress_text_label);
+    detail_row.set_spacing(8);
+    let percent = Label::new(&t_args(
+        "progress_percent",
+        &[("percent", &format!("{:.1}", torrent.progress() * 100.0))],
+    ))
+    .build();
+    percent.set_object_name("Secondary");
+    detail_row.add(percent);
+    detail_row.add_spacer(Spacer::horizontal_expanding());
+    let size = Label::new(&t_args(
+        "progress_size",
+        &[
+            ("done", &format_bytes(torrent.completed())),
+            ("total", &format_bytes(torrent.total_size)),
+        ],
+    ))
+    .build();
+    size.set_object_name("Secondary");
+    detail_row.add(size);
+    detail_row.add_spacer(Spacer::horizontal_expanding());
     let rates = Label::new(&format!(
         "↓ {}   ↑ {}",
         format_rate(torrent.rate_download),
@@ -635,6 +646,7 @@ fn make_card(torrent: &Torrent, downloads: &Path, detailed: bool, g: &Gui) -> Wi
     .build();
     rates.set_object_name("Secondary");
     detail_row.add(rates);
+    detail_row.add_spacer(Spacer::horizontal_expanding());
     let peers = Label::new(&t_args(
         "peers",
         &[
@@ -677,7 +689,6 @@ fn show_actions(
     folder: &Path,
     torrent_name: &str,
     torrent_id: i64,
-    files: Vec<TorrentFile>,
     window_ptr: usize,
     more_ptr: usize,
     theme: &str,
@@ -688,17 +699,15 @@ fn show_actions(
     let folder = folder.to_path_buf();
     let torrent_name = torrent_name.to_string();
     chrome::show_popup_below(&RawParent(window_ptr), more_ptr, theme, |popup| {
-        let files_copy = files.clone();
         let name_copy = torrent_name.clone();
         let theme_copy = theme.to_string();
         let rpc_copy = rpc_url.clone();
         chrome::popup_add_action(popup, &t("files_show"), true, move || {
             let name = name_copy.clone();
-            let files = files_copy.clone();
             let theme = theme_copy.clone();
             let rpc = rpc_copy.clone();
             chrome::defer(move || {
-                show_files(window_ptr, &name, torrent_id, &files, &theme, rpc.clone());
+                show_files(window_ptr, &name, torrent_id, &theme, rpc.clone());
             });
         });
         let hash_copy = hash.clone();
@@ -724,19 +733,16 @@ fn show_actions(
     });
 }
 
-fn show_files(
-    window_ptr: usize,
-    name: &str,
-    torrent_id: i64,
-    files: &[TorrentFile],
-    theme: &str,
-    rpc_url: String,
-) {
+fn show_files(window_ptr: usize, name: &str, torrent_id: i64, theme: &str, rpc_url: String) {
+    let files = TransmissionRPC::new(&rpc_url)
+        .ok()
+        .and_then(|rpc| rpc.get_torrent_files(torrent_id).ok())
+        .unwrap_or_default();
     chrome::files_exec(
         window_ptr,
         &stylesheet(theme),
         name,
-        files,
+        &files,
         move |index, wanted, priority| {
             let result = TransmissionRPC::new(&rpc_url).and_then(|rpc| {
                 rpc.set_file_priority(torrent_id, i64::from(index), wanted != 0, i64::from(priority))
