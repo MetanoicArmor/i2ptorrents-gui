@@ -80,6 +80,24 @@ QScrollBar::handle:vertical {
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
 QCheckBox { spacing: 8px; }
+QTableWidget#FilesTable {
+    background: #1f1f23; border: none; border-radius: 10px; gridline-color: transparent;
+    alternate-background-color: #24262d;
+}
+QTableWidget#FilesTable::item { padding: 6px 8px; }
+QTableWidget#FilesTable QLabel#FilesName {
+    background: transparent;
+}
+QTableWidget#FilesTable QComboBox {
+    padding: 2px 8px; min-width: 0px;
+}
+QTableWidget#FilesTable QComboBox::drop-down {
+    width: 16px;
+}
+QHeaderView::section {
+    background: transparent; color: #9aa3b5; border: none; padding: 8px;
+    font-weight: 600; font-size: 12px;
+}
 
 QToolTip {
     background: #22252d; color: #e3e8f1; border: none;

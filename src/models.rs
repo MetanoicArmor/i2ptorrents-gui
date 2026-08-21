@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use crate::i18n::{t, t_args};
 use serde_json::Value;
 
@@ -38,6 +40,78 @@ impl TorrentStatus {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum FilePriority {
+    Skip,
+    Low,
+    Normal,
+    High,
+}
+
+impl FilePriority {
+    pub fn from_rpc(wanted: bool, priority: i64) -> Self {
+        if !wanted {
+            return Self::Skip;
+        }
+        match priority {
+            -1 => Self::Low,
+            1 => Self::High,
+            _ => Self::Normal,
+        }
+    }
+
+    pub fn wanted(self) -> bool {
+        self != Self::Skip
+    }
+
+    pub fn rpc_priority(self) -> i64 {
+        match self {
+            Self::Skip | Self::Normal => 0,
+            Self::Low => -1,
+            Self::High => 1,
+        }
+    }
+
+    pub fn combo_index(self) -> i32 {
+        match self {
+            Self::Skip => 0,
+            Self::Low => 1,
+            Self::Normal => 2,
+            Self::High => 3,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct TorrentFile {
+    pub index: i64,
+    pub name: String,
+    pub length: u64,
+    pub bytes_completed: u64,
+    pub wanted: bool,
+    pub priority: i64,
+}
+
+impl TorrentFile {
+    pub fn kind(&self) -> FilePriority {
+        FilePriority::from_rpc(self.wanted, self.priority)
+    }
+
+    pub fn display_name(&self) -> String {
+        display_file_name(&self.name)
+    }
+
+    pub fn progress_label(&self) -> String {
+        if self.length == 0 {
+            return "—".into();
+        }
+        format!(
+            "{:.0}%",
+            (self.bytes_completed as f64 / self.length as f64 * 100.0).clamp(0.0, 100.0)
+        )
+    }
+}
+
 #[derive(Debug, Clone, PartialEq)]
 pub struct Torrent {
     pub id: i64,
@@ -54,6 +128,7 @@ pub struct Torrent {
     pub hash_string: String,
     pub finished: bool,
     pub pieces: Vec<bool>,
+    pub files: Vec<TorrentFile>,
 }
 
 impl Torrent {
@@ -114,7 +189,51 @@ impl Torrent {
             hash_string: hash,
             finished,
             pieces: decode_piece_bitfield(value_of(obj, "pieces", "pieces"), piece_count, finished),
+            files: parse_torrent_files(obj),
         })
+    }
+}
+
+pub fn parse_torrent_files(obj: &serde_json::Map<String, Value>) -> Vec<TorrentFile> {
+    let rows = match value_of(obj, "files", "files").and_then(Value::as_array) {
+        Some(items) if !items.is_empty() => items,
+        _ => return Vec::new(),
+    };
+    let wanted = value_of(obj, "wanted", "wanted")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let priorities = value_of(obj, "priorities", "priorities")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    rows.iter()
+        .enumerate()
+        .filter_map(|(index, item)| {
+            let file = item.as_object()?;
+            let name = json_str(value_of(file, "name", "name")).unwrap_or_default();
+            Some(TorrentFile {
+                index: index as i64,
+                name,
+                length: json_u64(value_of(file, "length", "length")).unwrap_or(0),
+                bytes_completed: json_u64(value_of(file, "bytesCompleted", "bytes_completed"))
+                    .unwrap_or(0),
+                wanted: json_truthy(wanted.get(index)).unwrap_or(true),
+                priority: json_i64(priorities.get(index)).unwrap_or(0),
+            })
+        })
+        .collect()
+}
+
+pub fn display_file_name(name: &str) -> String {
+    let path = Path::new(name);
+    if path.is_absolute() || name.starts_with('/') || name.starts_with('\\') {
+        path.file_name()
+            .map(|part| part.to_string_lossy().into_owned())
+            .filter(|part| !part.is_empty())
+            .unwrap_or_else(|| name.to_string())
+    } else {
+        name.replace('\\', "/")
     }
 }
 
@@ -138,7 +257,15 @@ fn json_u64(value: Option<&Value>) -> Option<u64> {
 }
 
 fn json_bool(value: Option<&Value>) -> Option<bool> {
-    value.and_then(Value::as_bool)
+    json_truthy(value)
+}
+
+fn json_truthy(value: Option<&Value>) -> Option<bool> {
+    value.and_then(|v| {
+        v.as_bool()
+            .or_else(|| v.as_i64().map(|n| n != 0))
+            .or_else(|| v.as_u64().map(|n| n != 0))
+    })
 }
 
 fn json_str(value: Option<&Value>) -> Option<String> {

@@ -1,7 +1,7 @@
 use base64::Engine;
 use i2ptorrents_gui::i18n::set_language;
 use i2ptorrents_gui::models::{
-    decode_piece_bitfield, format_bytes, format_rate, Torrent, TorrentStatus,
+    decode_piece_bitfield, format_bytes, format_rate, FilePriority, Torrent, TorrentStatus,
 };
 use serde_json::json;
 
@@ -27,6 +27,27 @@ fn torrent_parses_snake_case_fields_returned_by_i2pd() {
     assert_eq!(torrent.hash_string, "abc");
     assert_eq!(torrent.pieces[0], true);
     assert_eq!(*torrent.pieces.last().unwrap(), true);
+}
+
+#[test]
+fn torrent_parses_i2pd_files_wanted_priorities() {
+    let torrent = Torrent::from_rpc(&json!({
+        "id": 2,
+        "name": "Album",
+        "files": [
+            {"name": "disk/a.flac", "length": 1000, "bytes_completed": 250},
+            {"name": "/abs/b.flac", "length": 4000, "bytesCompleted": 0}
+        ],
+        "wanted": [1, 0],
+        "priorities": [1, -1]
+    }))
+    .unwrap();
+    assert_eq!(torrent.files.len(), 2);
+    assert_eq!(torrent.files[0].display_name(), "disk/a.flac");
+    assert_eq!(torrent.files[0].kind(), FilePriority::High);
+    assert_eq!(torrent.files[0].progress_label(), "25%");
+    assert_eq!(torrent.files[1].display_name(), "b.flac");
+    assert_eq!(torrent.files[1].kind(), FilePriority::Skip);
 }
 
 #[test]

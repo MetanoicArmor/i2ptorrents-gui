@@ -23,6 +23,7 @@ A desktop client for i2pd’s torrent tunnel. The UI follows the look of [I2PCha
 ### Features
 
 - torrent list, progress, piece map, rates, peers, and info hash;
+- file list on torrent click (available before the download finishes), with skip/priority via `torrent-set` when the daemon supports it;
 - simple card view in settings (no piece bar or hash);
 - copy info hash and open the download folder;
 - add `.torrent` files;
@@ -110,7 +111,7 @@ Rust and Qt 6 are required. The release version comes from the `VERSION` file.
 
 ### i2pd RPC limits
 
-Current i2pd only exposes `torrent-add`, `torrent-get`, and `torrent-remove`. Pause, resume, tracker edits, speed limits, and magnet links are not available on the daemon yet. Add a ready `.torrent` file.
+Current i2pd exposes `torrent-add`, `torrent-get`, and `torrent-remove`. `torrent-get` can return `files`, `wanted`, and `priorities` (openssl branch, 20 Aug 2026). `wanted`/`priorities` are still stubs, and `torrent-set` is not implemented yet, so skip/priority in the GUI will show a notice until the daemon accepts it. Pause, resume, tracker edits, speed limits, and magnet links are not available. Add a ready `.torrent` file.
 
 ### License
 
@@ -125,6 +126,7 @@ Current i2pd only exposes `torrent-add`, `torrent-get`, and `torrent-remove`. Pa
 ### Возможности
 
 - список торрентов, прогресс, карта кусков, скорости, пиры и info hash;
+- список файлов по клику на карточку (до полной загрузки), с попыткой задать пропуск и приоритет через `torrent-set`;
 - упрощённый вид карточек в настройках (без полосы кусков и хеша);
 - копирование info hash и открытие папки загрузки;
 - добавление `.torrent`-файлов;
@@ -212,7 +214,7 @@ cargo test --no-default-features
 
 ### Ограничения i2pd RPC
 
-Текущая реализация i2pd предоставляет только `torrent-add`, `torrent-get` и `torrent-remove`. Пауза, возобновление, изменение трекеров, лимитов скорости и magnet-ссылки пока не поддерживаются на стороне i2pd. Добавляйте готовый `.torrent`-файл.
+Текущая реализация i2pd предоставляет `torrent-add`, `torrent-get` и `torrent-remove`. В `torrent-get` уже есть поля `files`, `wanted` и `priorities` (ветка openssl, 20 августа 2026). `wanted`/`priorities` пока заглушки, а `torrent-set` ещё нет — пропуск и приоритет в GUI покажут предупреждение, пока демон их не примет. Пауза, возобновление, изменение трекеров, лимитов скорости и magnet-ссылки пока не поддерживаются. Добавляйте готовый `.torrent`-файл.
 
 ### Лицензия
 
@@ -224,7 +226,7 @@ cargo test --no-default-features
 
 <div align="center">
 
-<img src="ton_donation_qr.png" alt="GRAM donation QR" width="200">
+<img src="assets/ton_donation_qr.png" alt="GRAM donation QR" width="200">
 
 ```
 UQCsX_UVKylmlxb4dWZlXdmlyRzNm-kzUx7Ld1VQHk1ob0MY

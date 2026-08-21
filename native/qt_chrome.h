@@ -9,11 +9,13 @@ extern "C" {
 
 typedef void (*i2p_void_cb)(void *ctx);
 typedef void (*i2p_int_cb)(void *ctx, int value);
+typedef int (*i2p_file_change_cb)(void *ctx, int index, int wanted, int priority);
 
 void i2p_widget_delete(void *widget);
 void i2p_widget_set_object_name(void *widget, const char *name);
 void i2p_widget_set_tooltip(void *widget, const char *tip);
 void i2p_widget_set_cursor(void *widget, int shape);
+void i2p_widget_on_click(void *widget, i2p_void_cb cb, void *ctx);
 void i2p_label_set_text(void *widget, const char *text);
 void i2p_widget_repolish(void *widget);
 void i2p_line_edit_set_placeholder(void *widget, const char *text);
@@ -119,6 +121,37 @@ typedef struct i2p_about_in {
 } i2p_about_in;
 
 void i2p_about_exec(void *parent, const i2p_about_in *in);
+
+typedef struct i2p_file_row {
+    int index;
+    const char *name;
+    const char *full_name;
+    const char *size;
+    const char *progress;
+    int wanted;
+    int priority;
+} i2p_file_row;
+
+typedef struct i2p_files_in {
+    const char *stylesheet;
+    const char *title;
+    const char *note;
+    const char *unsupported_note;
+    const char *empty;
+    const char *close;
+    const char *col_name;
+    const char *col_size;
+    const char *col_progress;
+    const char *col_priority;
+    const char *priority_skip;
+    const char *priority_low;
+    const char *priority_normal;
+    const char *priority_high;
+    const i2p_file_row *files;
+    int file_count;
+} i2p_files_in;
+
+void i2p_files_exec(void *parent, const i2p_files_in *in, i2p_file_change_cb cb, void *ctx);
 
 int i2p_confirm_remove(void *parent, const char *title, const char *text,
                        const char *checkbox, const char *yes_label,

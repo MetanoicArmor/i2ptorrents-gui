@@ -19,6 +19,7 @@
 #include <QFrame>
 #include <QGuiApplication>
 #include <QHBoxLayout>
+#include <QHeaderView>
 #include <QHelpEvent>
 #include <QIcon>
 #include <QKeyEvent>
@@ -38,6 +39,7 @@
 #include <QPoint>
 #include <QPropertyAnimation>
 #include <QPixmap>
+#include <QPointer>
 #include <QPushButton>
 #include <QRectF>
 #include <QRegion>
@@ -53,6 +55,11 @@
 #include <QStyle>
 #include <QStyledItemDelegate>
 #include <QStyleOptionViewItem>
+#include <QTableWidget>
+#include <QTableWidgetItem>
+#include <QTextLayout>
+#include <QTextLine>
+#include <QTextOption>
 #include <QTimer>
 #include <QToolButton>
 #include <QVBoxLayout>
@@ -865,6 +872,158 @@ private:
     bool night_ = false;
 };
 
+class FilesNameLabel final : public QLabel {
+public:
+    FilesNameLabel(const QString &text, const QString &tip, QWidget *parent = nullptr) : QLabel(parent) {
+        setObjectName(QStringLiteral("FilesName"));
+        setText(text);
+        setToolTip(tip.isEmpty() ? text : tip);
+        setAlignment(Qt::AlignLeft | Qt::AlignTop);
+        setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
+        setContentsMargins(pad_x_, pad_y_, pad_x_, pad_y_);
+        setAttribute(Qt::WA_OpaquePaintEvent, true);
+        setAutoFillBackground(false);
+    }
+
+    bool hasHeightForWidth() const override { return true; }
+
+    int heightForWidth(int w) const override {
+        const int text_w = std::max(1, w - pad_x_ * 2 - extraBearing());
+        return std::max(40, textHeight(text_w) + pad_y_ * 2);
+    }
+
+    QSize sizeHint() const override {
+        const int w = std::max(80, width());
+        return QSize(w, heightForWidth(w));
+    }
+
+    QSize minimumSizeHint() const override { return QSize(40, 40); }
+
+protected:
+    void paintEvent(QPaintEvent *) override {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::TextAntialiasing, true);
+        painter.fillRect(rect(), rowBackground());
+        painter.setPen(palette().color(QPalette::WindowText));
+        const QRect inner = contentsRect().adjusted(extraBearing(), 0, 0, 0);
+        QTextLayout layout(text(), font());
+        fillLayout(&layout, inner.width());
+        layout.draw(&painter, QPointF(inner.left(), inner.top()));
+    }
+
+    void resizeEvent(QResizeEvent *event) override {
+        QLabel::resizeEvent(event);
+        update();
+    }
+
+private:
+    void fillLayout(QTextLayout *layout, int width) const {
+        QTextOption option;
+        option.setWrapMode(QTextOption::WrapAnywhere);
+        option.setAlignment(Qt::AlignLeft | Qt::AlignTop);
+        layout->setTextOption(option);
+        const QFontMetricsF fm(font());
+        const qreal spacing = std::max(fm.lineSpacing(), qreal(1));
+        layout->beginLayout();
+        qreal y = 0;
+        const int line_width = std::max(1, width);
+        while (true) {
+            QTextLine line = layout->createLine();
+            if (!line.isValid()) {
+                break;
+            }
+            line.setLineWidth(line_width);
+            line.setPosition(QPointF(0, y));
+            y += std::max(spacing, line.height());
+        }
+        layout->endLayout();
+    }
+
+    int extraBearing() const { return std::max(0, -fontMetrics().minLeftBearing()); }
+
+    QColor rowBackground() const {
+        const QTableWidget *table = nullptr;
+        for (QWidget *p = parentWidget(); p != nullptr; p = p->parentWidget()) {
+            table = qobject_cast<QTableWidget *>(p);
+            if (table != nullptr) {
+                break;
+            }
+        }
+        if (table == nullptr) {
+            return palette().color(QPalette::Base);
+        }
+        int row = -1;
+        for (int r = 0; r < table->rowCount(); ++r) {
+            if (table->cellWidget(r, 0) == this) {
+                row = r;
+                break;
+            }
+        }
+        const QPalette pal = table->palette();
+        if (row >= 0 && table->alternatingRowColors() && (row % 2) == 1) {
+            return pal.color(QPalette::AlternateBase);
+        }
+        return pal.color(QPalette::Base);
+    }
+
+    int textHeight(int width) const {
+        QTextLayout layout(text(), font());
+        fillLayout(&layout, width);
+        if (layout.lineCount() == 0) {
+            return static_cast<int>(std::ceil(QFontMetricsF(font()).lineSpacing()));
+        }
+        const QTextLine last = layout.lineAt(layout.lineCount() - 1);
+        const qreal bottom = last.y() + std::max(last.height(), QFontMetricsF(font()).lineSpacing());
+        return static_cast<int>(std::ceil(bottom + 2));
+    }
+
+    static constexpr int pad_x_ = 8;
+    static constexpr int pad_y_ = 8;
+};
+
+class CardClickFilter final : public QObject {
+public:
+    CardClickFilter(QWidget *target, i2p_void_cb cb, void *ctx) : QObject(target), cb_(cb), ctx_(ctx) {
+        target->installEventFilter(this);
+        target->setCursor(Qt::PointingHandCursor);
+    }
+
+protected:
+    bool eventFilter(QObject *obj, QEvent *event) override {
+        if (event->type() != QEvent::MouseButtonRelease) {
+            return false;
+        }
+        auto *mouse = static_cast<QMouseEvent *>(event);
+        if (mouse->button() != Qt::LeftButton) {
+            return false;
+        }
+        auto *widget = qobject_cast<QWidget *>(obj);
+        if (widget == nullptr) {
+            return false;
+        }
+        for (QWidget *cur = widget->childAt(mouse->pos()); cur != nullptr && cur != widget;
+             cur = cur->parentWidget()) {
+            if (cur->objectName() == QLatin1String("MoreButton")) {
+                return false;
+            }
+        }
+        if (cb_) {
+            const i2p_void_cb cb = cb_;
+            void *ctx = ctx_;
+            QTimer::singleShot(0, qApp, [cb, ctx]() {
+                if (cb) {
+                    cb(ctx);
+                }
+            });
+        }
+        return false;
+    }
+
+private:
+    i2p_void_cb cb_ = nullptr;
+    void *ctx_ = nullptr;
+};
+
 class SpinFocusFilter final : public QObject {
 public:
     explicit SpinFocusFilter(QFrame *row) : QObject(row), row_(row) {}
@@ -982,7 +1141,7 @@ public:
         QObject::connect(&fade_out_, &QAbstractAnimation::finished, this, [this] { afterFadeOutHide(); });
     }
 
-    QWidget *owner = nullptr;
+    QPointer<QWidget> owner;
 
     void present(const QPoint &global_top_left, const QString &text, int msec, QWidget *owner_widget) {
         QApplication *app = qApp;
@@ -1152,7 +1311,10 @@ bool cursor_over_owner_or_tip(QWidget *owner) {
     if (g_tip && (widget == g_tip || g_tip->isAncestorOf(widget))) {
         return true;
     }
-    return owner && (widget == owner || owner->isAncestorOf(widget));
+    if (owner == nullptr) {
+        return false;
+    }
+    return widget == owner || owner->isAncestorOf(widget);
 }
 
 class TooltipInterceptFilter final : public QObject {
@@ -1175,7 +1337,7 @@ protected:
             return false;
         }
         const QEvent::Type et = event->type();
-        QWidget *owner = g_tip->owner;
+        QWidget *owner = g_tip->owner.data();
         if (et == QEvent::MouseButtonPress || et == QEvent::Wheel || et == QEvent::KeyPress ||
             et == QEvent::FocusOut || et == QEvent::WindowDeactivate) {
             g_tip->cancelDismiss();
@@ -1186,12 +1348,12 @@ protected:
             } else {
                 g_tip->scheduleDismiss();
             }
-        } else if (et == QEvent::Hide || et == QEvent::Close) {
+        } else if (et == QEvent::Hide || et == QEvent::Close || et == QEvent::Destroy) {
             auto *widget = qobject_cast<QWidget *>(obj);
-            if (widget && owner && (widget == owner || owner->isAncestorOf(widget) || widget->isAncestorOf(owner))) {
+            if (owner == nullptr) {
                 g_tip->cancelDismiss();
                 g_tip->forceHide();
-            } else if (owner == nullptr) {
+            } else if (widget && (widget == owner || owner->isAncestorOf(widget) || widget->isAncestorOf(owner))) {
                 g_tip->cancelDismiss();
                 g_tip->forceHide();
             }
@@ -1249,6 +1411,12 @@ void i2p_widget_set_tooltip(void *widget, const char *tip) {
 void i2p_widget_set_cursor(void *widget, int shape) {
     if (QWidget *w = as_widget(widget)) {
         w->setCursor(static_cast<Qt::CursorShape>(shape));
+    }
+}
+
+void i2p_widget_on_click(void *widget, i2p_void_cb cb, void *ctx) {
+    if (QWidget *w = as_widget(widget)) {
+        new CardClickFilter(w, cb, ctx);
     }
 }
 
@@ -1710,6 +1878,193 @@ void i2p_about_exec(void *parent, const i2p_about_in *in) {
     layout->addWidget(ok, 0, Qt::AlignRight);
 
     dialog.exec();
+}
+
+static int file_combo_index(int wanted, int priority) {
+    if (wanted == 0) {
+        return 0;
+    }
+    if (priority < 0) {
+        return 1;
+    }
+    if (priority > 0) {
+        return 3;
+    }
+    return 2;
+}
+
+void i2p_files_exec(void *parent, const i2p_files_in *in, i2p_file_change_cb cb, void *ctx) {
+    if (in == nullptr) {
+        return;
+    }
+    QDialog dialog(as_widget(parent));
+    dialog.setWindowTitle(qstr(in->title));
+    dialog.setModal(true);
+    dialog.setWindowModality(Qt::WindowModal);
+    dialog.setMinimumSize(560, 380);
+    dialog.resize(640, 460);
+    if (in->stylesheet && in->stylesheet[0] != '\0') {
+        dialog.setStyleSheet(qstr(in->stylesheet));
+    }
+
+    auto *layout = new QVBoxLayout(&dialog);
+    layout->setContentsMargins(18, 16, 18, 16);
+    layout->setSpacing(10);
+
+    auto *note = new QLabel(qstr(in->note), &dialog);
+    note->setObjectName(QStringLiteral("Secondary"));
+    note->setWordWrap(true);
+    layout->addWidget(note);
+
+    if (in->file_count <= 0) {
+        auto *empty = new QLabel(qstr(in->empty), &dialog);
+        empty->setObjectName(QStringLiteral("Secondary"));
+        empty->setWordWrap(true);
+        layout->addWidget(empty, 1);
+    } else {
+        auto *table = new QTableWidget(in->file_count, 4, &dialog);
+        table->setObjectName(QStringLiteral("FilesTable"));
+        table->setHorizontalHeaderLabels({qstr(in->col_name), qstr(in->col_size), qstr(in->col_progress),
+                                          qstr(in->col_priority)});
+        table->verticalHeader()->setVisible(false);
+        table->setShowGrid(false);
+        table->setSelectionMode(QAbstractItemView::NoSelection);
+        table->setFocusPolicy(Qt::NoFocus);
+        table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+        table->setAlternatingRowColors(true);
+        table->horizontalHeader()->setMinimumSectionSize(28);
+        table->horizontalHeader()->setStretchLastSection(false);
+        table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+        table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+        table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::Fixed);
+        table->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Fixed);
+        table->verticalHeader()->setSectionResizeMode(QHeaderView::Fixed);
+        table->verticalHeader()->setMinimumSectionSize(40);
+
+        const QStringList priority_labels = {qstr(in->priority_skip), qstr(in->priority_low),
+                                             qstr(in->priority_normal), qstr(in->priority_high)};
+        const QFontMetrics metrics(table->font());
+        int priority_text_w = metrics.horizontalAdvance(qstr(in->col_priority));
+        for (const QString &label : priority_labels) {
+            priority_text_w = std::max(priority_text_w, metrics.horizontalAdvance(label));
+        }
+
+        std::vector<QComboBox *> combos;
+        combos.reserve(static_cast<size_t>(in->file_count));
+        for (int row = 0; row < in->file_count; ++row) {
+            const i2p_file_row &file = in->files[row];
+            const QString name = qstr(file.name);
+            const QString full_name = qstr(file.full_name);
+            const QString tip = full_name.isEmpty() ? name : full_name;
+            auto *name_label = new FilesNameLabel(name, tip, table);
+            table->setCellWidget(row, 0, name_label);
+
+            auto add_text = [&](int column, const char *text) {
+                auto *item = new QTableWidgetItem(qstr(text));
+                item->setFlags(Qt::ItemIsEnabled);
+                item->setToolTip(tip);
+                item->setTextAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+                table->setItem(row, column, item);
+            };
+            add_text(1, file.size);
+            add_text(2, file.progress);
+
+            auto *combo = new QComboBox(table);
+            combo->addItem(priority_labels[0], 0);
+            combo->addItem(priority_labels[1], -1);
+            combo->addItem(priority_labels[2], 0);
+            combo->addItem(priority_labels[3], 1);
+            combo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+            combo->setSizePolicy(QSizePolicy::Minimum, QSizePolicy::Fixed);
+            combo->setMinimumWidth(priority_text_w + 48);
+            combo->setToolTip(tip);
+            const int start = file_combo_index(file.wanted, file.priority);
+            combo->setCurrentIndex(start);
+            combo->setProperty("prev", start);
+            combo->setProperty("fileIndex", file.index);
+
+            auto *priority_cell = new QWidget(table);
+            auto *priority_layout = new QVBoxLayout(priority_cell);
+            priority_layout->setContentsMargins(2, 4, 2, 4);
+            priority_layout->setSpacing(0);
+            priority_layout->addStretch();
+            priority_layout->addWidget(combo);
+            priority_layout->addStretch();
+            table->setCellWidget(row, 3, priority_cell);
+            combos.push_back(combo);
+        }
+
+        table->setColumnWidth(2, std::max(metrics.horizontalAdvance(QStringLiteral("100%")),
+                                          metrics.horizontalAdvance(qstr(in->col_progress))) +
+                                     20);
+        table->setColumnWidth(3, priority_text_w + 56);
+
+        auto relayout_rows = [table] {
+            for (int row = 0; row < table->rowCount(); ++row) {
+                QWidget *cell = table->cellWidget(row, 0);
+                if (cell == nullptr || cell->objectName() != QLatin1String("FilesName")) {
+                    continue;
+                }
+                const int name_w = cell->width() > 1 ? cell->width() : std::max(1, table->columnWidth(0));
+                table->setRowHeight(row, static_cast<FilesNameLabel *>(cell)->heightForWidth(name_w));
+            }
+        };
+        QObject::connect(table->horizontalHeader(), &QHeaderView::sectionResized, table,
+                         [relayout_rows](int index, int, int) {
+                             if (index == 0) {
+                                 relayout_rows();
+                             }
+                         });
+        QTimer::singleShot(0, table, relayout_rows);
+
+        const QString unsupported = qstr(in->unsupported_note);
+        for (QComboBox *combo : combos) {
+            QObject::connect(combo, QOverload<int>::of(&QComboBox::currentIndexChanged),
+                             [combo, &combos, note, unsupported, cb, ctx](int index) {
+                                 if (cb == nullptr) {
+                                     return;
+                                 }
+                                 const int wanted = index == 0 ? 0 : 1;
+                                 int priority = 0;
+                                 if (index == 1) {
+                                     priority = -1;
+                                 } else if (index == 3) {
+                                     priority = 1;
+                                 }
+                                 const int rc = cb(ctx, combo->property("fileIndex").toInt(), wanted, priority);
+                                 if (rc == 0) {
+                                     combo->setProperty("prev", index);
+                                     return;
+                                 }
+                                 combo->blockSignals(true);
+                                 combo->setCurrentIndex(combo->property("prev").toInt());
+                                 combo->blockSignals(false);
+                                 if (rc == 1) {
+                                     note->setText(unsupported);
+                                     for (QComboBox *item : combos) {
+                                         item->setEnabled(false);
+                                     }
+                                 }
+                             });
+        }
+        layout->addWidget(table, 1);
+    }
+
+    auto *close = new QPushButton(qstr(in->close), &dialog);
+    close->setObjectName(QStringLiteral("Primary"));
+    close->setDefault(true);
+    QObject::connect(close, &QPushButton::clicked, &dialog, [&dialog] {
+        if (g_tip) {
+            g_tip->forceHide();
+        }
+        QTimer::singleShot(0, &dialog, &QDialog::accept);
+    });
+    layout->addWidget(close, 0, Qt::AlignRight);
+
+    dialog.exec();
+    if (g_tip) {
+        g_tip->forceHide();
+    }
 }
 
 void i2p_defer(i2p_void_cb cb, void *ctx) {

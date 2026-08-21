@@ -51,12 +51,44 @@ struct I2pAboutIn {
     ok: *const c_char,
 }
 
+#[repr(C)]
+struct I2pFileRow {
+    index: c_int,
+    name: *const c_char,
+    full_name: *const c_char,
+    size: *const c_char,
+    progress: *const c_char,
+    wanted: c_int,
+    priority: c_int,
+}
+
+#[repr(C)]
+struct I2pFilesIn {
+    stylesheet: *const c_char,
+    title: *const c_char,
+    note: *const c_char,
+    unsupported_note: *const c_char,
+    empty: *const c_char,
+    close: *const c_char,
+    col_name: *const c_char,
+    col_size: *const c_char,
+    col_progress: *const c_char,
+    col_priority: *const c_char,
+    priority_skip: *const c_char,
+    priority_low: *const c_char,
+    priority_normal: *const c_char,
+    priority_high: *const c_char,
+    files: *const I2pFileRow,
+    file_count: c_int,
+}
+
 #[link(name = "i2p_qt_chrome")]
 extern "C" {
     fn i2p_widget_delete(widget: *mut c_void);
     fn i2p_widget_set_object_name(widget: *mut c_void, name: *const c_char);
     fn i2p_widget_set_tooltip(widget: *mut c_void, tip: *const c_char);
     fn i2p_widget_set_cursor(widget: *mut c_void, shape: c_int);
+    fn i2p_widget_on_click(widget: *mut c_void, cb: I2pVoidCb, ctx: *mut c_void);
     fn i2p_label_set_text(widget: *mut c_void, text: *const c_char);
     fn i2p_widget_repolish(widget: *mut c_void);
     fn i2p_line_edit_set_placeholder(widget: *mut c_void, text: *const c_char);
@@ -83,6 +115,12 @@ extern "C" {
         filter: *const c_char,
     ) -> *const c_char;
     fn i2p_about_exec(parent: *mut c_void, input: *const I2pAboutIn);
+    fn i2p_files_exec(
+        parent: *mut c_void,
+        input: *const I2pFilesIn,
+        cb: I2pFileChangeCb,
+        ctx: *mut c_void,
+    );
     fn i2p_push_button_set_checkable(widget: *mut c_void, checkable: c_int);
     fn i2p_push_button_set_checked(widget: *mut c_void, checked: c_int);
     fn i2p_push_button_set_auto_exclusive(widget: *mut c_void, exclusive: c_int);
@@ -134,6 +172,7 @@ extern "C" {
 
 type I2pVoidCb = unsafe extern "C" fn(*mut c_void);
 type I2pIntCb = unsafe extern "C" fn(*mut c_void, c_int);
+type I2pFileChangeCb = unsafe extern "C" fn(*mut c_void, c_int, c_int, c_int) -> c_int;
 
 unsafe extern "C" fn void_trampoline(ctx: *mut c_void) {
     let callback = &**(ctx as *mut Box<dyn Fn()>);
@@ -145,12 +184,28 @@ unsafe extern "C" fn int_trampoline(ctx: *mut c_void, value: c_int) {
     callback(value);
 }
 
+unsafe extern "C" fn file_change_trampoline(
+    ctx: *mut c_void,
+    index: c_int,
+    wanted: c_int,
+    priority: c_int,
+) -> c_int {
+    let callback = &**(ctx as *mut Box<dyn Fn(i32, i32, i32) -> i32>);
+    callback(index, wanted, priority)
+}
+
 fn leak_void(callback: impl Fn() + 'static) -> *mut c_void {
     Box::into_raw(Box::new(Box::new(callback) as Box<dyn Fn()>)) as *mut c_void
 }
 
 fn leak_int(callback: impl Fn(i32) + 'static) -> *mut c_void {
     Box::into_raw(Box::new(Box::new(callback) as Box<dyn Fn(i32)>)) as *mut c_void
+}
+
+fn leak_file_change(callback: impl Fn(i32, i32, i32) -> i32 + 'static) -> *mut c_void {
+    Box::into_raw(Box::new(
+        Box::new(callback) as Box<dyn Fn(i32, i32, i32) -> i32>
+    )) as *mut c_void
 }
 
 fn cstr(value: &str) -> CString {
@@ -383,6 +438,93 @@ pub fn about_exec(parent: usize, stylesheet: &str) {
         ok: ok.as_ptr(),
     };
     unsafe { i2p_about_exec(parent as *mut c_void, &input) }
+}
+
+pub fn on_click(widget: &dyn AsWidget, callback: impl Fn() + 'static) {
+    unsafe {
+        i2p_widget_on_click(
+            widget.widget_ptr() as *mut c_void,
+            void_trampoline,
+            leak_void(callback),
+        )
+    }
+}
+
+pub fn files_exec(
+    parent: usize,
+    stylesheet: &str,
+    title: &str,
+    files: &[crate::models::TorrentFile],
+    on_change: impl Fn(i32, i32, i32) -> i32 + 'static,
+) {
+    use crate::i18n::t;
+    use crate::models::format_bytes;
+    let names: Vec<CString> = files
+        .iter()
+        .map(|file| cstr(&file.display_name()))
+        .collect();
+    let full_names: Vec<CString> = files.iter().map(|file| cstr(&file.name)).collect();
+    let sizes: Vec<CString> = files
+        .iter()
+        .map(|file| cstr(&format_bytes(file.length)))
+        .collect();
+    let progresses: Vec<CString> = files
+        .iter()
+        .map(|file| cstr(&file.progress_label()))
+        .collect();
+    let rows: Vec<I2pFileRow> = files
+        .iter()
+        .enumerate()
+        .map(|(index, file)| I2pFileRow {
+            index: file.index as c_int,
+            name: names[index].as_ptr(),
+            full_name: full_names[index].as_ptr(),
+            size: sizes[index].as_ptr(),
+            progress: progresses[index].as_ptr(),
+            wanted: i32::from(file.wanted),
+            priority: file.priority as c_int,
+        })
+        .collect();
+    let stylesheet = cstr(stylesheet);
+    let title = cstr(title);
+    let note = cstr(&t("files_note"));
+    let unsupported_note = cstr(&t("files_set_unsupported"));
+    let empty = cstr(&t("files_empty"));
+    let close = cstr(&t("close"));
+    let col_name = cstr(&t("files_name"));
+    let col_size = cstr(&t("files_size"));
+    let col_progress = cstr(&t("files_progress"));
+    let col_priority = cstr(&t("files_priority"));
+    let priority_skip = cstr(&t("priority_skip"));
+    let priority_low = cstr(&t("priority_low"));
+    let priority_normal = cstr(&t("priority_normal"));
+    let priority_high = cstr(&t("priority_high"));
+    let input = I2pFilesIn {
+        stylesheet: stylesheet.as_ptr(),
+        title: title.as_ptr(),
+        note: note.as_ptr(),
+        unsupported_note: unsupported_note.as_ptr(),
+        empty: empty.as_ptr(),
+        close: close.as_ptr(),
+        col_name: col_name.as_ptr(),
+        col_size: col_size.as_ptr(),
+        col_progress: col_progress.as_ptr(),
+        col_priority: col_priority.as_ptr(),
+        priority_skip: priority_skip.as_ptr(),
+        priority_low: priority_low.as_ptr(),
+        priority_normal: priority_normal.as_ptr(),
+        priority_high: priority_high.as_ptr(),
+        files: rows.as_ptr(),
+        file_count: rows.len() as c_int,
+    };
+    unsafe {
+        i2p_files_exec(
+            parent as *mut c_void,
+            &input,
+            file_change_trampoline,
+            leak_file_change(on_change),
+        )
+    }
 }
 
 pub struct SettingsResult {

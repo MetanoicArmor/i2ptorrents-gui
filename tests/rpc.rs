@@ -90,6 +90,9 @@ fn get_torrents_omits_pieces_in_simple_view() {
         .collect();
     assert!(!fields.contains(&"pieces"));
     assert!(fields.contains(&"hashString"));
+    assert!(fields.contains(&"files"));
+    assert!(fields.contains(&"wanted"));
+    assert!(fields.contains(&"priorities"));
 }
 
 #[test]
@@ -113,4 +116,25 @@ fn add_torrent_sends_base64() {
     std::fs::write(&torrent_file, b"d4:infode").unwrap();
     let client = TransmissionRPC::with_transport("localhost:9191", transport).unwrap();
     assert_eq!(client.add_torrent_path(&torrent_file).unwrap()["id"], 1);
+}
+
+#[test]
+fn set_file_priority_sends_transmission_torrent_set() {
+    let captured = Arc::new(Mutex::new(None));
+    let transport = MockTransport {
+        handler: Box::new(|_, _| json!({})),
+        captured: captured.clone(),
+    };
+    let client = TransmissionRPC::with_transport("localhost:9191", transport).unwrap();
+    client.set_file_priority(3, 1, true, 1).unwrap();
+    let (method, arguments) = captured.lock().unwrap().clone().unwrap();
+    assert_eq!(method, "torrent-set");
+    assert_eq!(arguments["ids"], json!([3]));
+    assert_eq!(arguments["files-wanted"], json!([1]));
+    assert_eq!(arguments["priority-high"], json!([1]));
+
+    client.set_file_priority(3, 2, false, 0).unwrap();
+    let (method, arguments) = captured.lock().unwrap().clone().unwrap();
+    assert_eq!(method, "torrent-set");
+    assert_eq!(arguments["files-unwanted"], json!([2]));
 }

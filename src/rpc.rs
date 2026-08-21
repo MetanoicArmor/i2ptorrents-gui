@@ -34,6 +34,9 @@ pub const FIELDS: &[&str] = &[
     "totalSize",
     "hashString",
     "pieces",
+    "files",
+    "wanted",
+    "priorities",
 ];
 
 const MAX_RESPONSE_BYTES: usize = 8 * 1024 * 1024;
@@ -257,6 +260,34 @@ impl<T: RpcTransport> TransmissionRPC<T> {
         )?;
         Ok(())
     }
+
+    pub fn set_file_priority(
+        &self,
+        torrent_id: i64,
+        index: i64,
+        wanted: bool,
+        priority: i64,
+    ) -> Result<(), RpcError> {
+        let mut arguments = json!({ "ids": [torrent_id] });
+        if wanted {
+            arguments["files-wanted"] = json!([index]);
+            let key = match priority {
+                -1 => "priority-low",
+                1 => "priority-high",
+                _ => "priority-normal",
+            };
+            arguments[key] = json!([index]);
+        } else {
+            arguments["files-unwanted"] = json!([index]);
+        }
+        self.call("torrent-set", arguments)?;
+        Ok(())
+    }
+}
+
+pub fn rpc_method_unsupported(message: &str) -> bool {
+    let lower = message.to_ascii_lowercase();
+    lower.contains("method not found") || lower.contains("-32601")
 }
 
 use std::io::Read;

@@ -9,9 +9,9 @@ use qtrs::{clipboard, desktopservices, warning, MessageBox, Spacer, SpacerExt};
 
 use crate::config::AppSettings;
 use crate::i18n::{language, set_language, t, t_args};
-use crate::models::{format_rate, progress_text, Torrent, TorrentStatus};
+use crate::models::{format_rate, progress_text, Torrent, TorrentFile, TorrentStatus};
 use crate::qt_chrome as chrome;
-use crate::rpc::{normalize_rpc_url, TransmissionRPC};
+use crate::rpc::{normalize_rpc_url, rpc_method_unsupported, TransmissionRPC};
 use crate::theme::stylesheet;
 use crate::{application_icon_path, version, APP_NAME};
 
@@ -500,6 +500,23 @@ fn render_cards(g: &mut Gui) {
 fn make_card(torrent: &Torrent, downloads: &Path, detailed: bool, g: &Gui) -> Widget {
     let card = Widget::new().build();
     card.set_object_name("TorrentCard");
+    chrome::set_tooltip(&card, &t("files_tooltip"));
+    let files_torrent_id = torrent.id;
+    let files_name = torrent.name.clone();
+    let files = torrent.files.clone();
+    let files_theme = g.settings.theme.clone();
+    let files_rpc = g.settings.rpc_url.clone();
+    let files_window = g.window.widget_ptr() as usize;
+    chrome::on_click(&card, move || {
+        let window = files_window;
+        let name = files_name.clone();
+        let files = files.clone();
+        let theme = files_theme.clone();
+        let rpc = files_rpc.clone();
+        chrome::defer(move || {
+            show_files(window, &name, files_torrent_id, &files, &theme, rpc.clone());
+        });
+    });
     let mut root = VBoxLayout::with_parent(&card);
     root.set_contents_margins(14, 11, 14, 11);
     root.set_spacing(6);
@@ -518,6 +535,7 @@ fn make_card(torrent: &Torrent, downloads: &Path, detailed: bool, g: &Gui) -> Wi
     let folder = downloads.to_path_buf();
     let torrent_name = torrent.name.clone();
     let torrent_id = torrent.id;
+    let torrent_files = torrent.files.clone();
     let window_ptr = g.window.widget_ptr() as usize;
     let tx = g.tx.clone();
     let rpc_url = g.settings.rpc_url.clone();
@@ -529,12 +547,14 @@ fn make_card(torrent: &Torrent, downloads: &Path, detailed: bool, g: &Gui) -> Wi
     let more_slot_hash = hash.clone();
     let more_slot_folder = folder.clone();
     let more_slot_name = torrent_name.clone();
+    let more_slot_files = torrent_files.clone();
     more.connect_clicked(move || {
         show_actions(
             &more_slot_hash,
             &more_slot_folder,
             &more_slot_name,
             torrent_id,
+            more_slot_files.clone(),
             window_ptr,
             more_ptr,
             &theme,
@@ -627,6 +647,7 @@ fn show_actions(
     folder: &Path,
     torrent_name: &str,
     torrent_id: i64,
+    files: Vec<TorrentFile>,
     window_ptr: usize,
     more_ptr: usize,
     theme: &str,
@@ -637,6 +658,19 @@ fn show_actions(
     let folder = folder.to_path_buf();
     let torrent_name = torrent_name.to_string();
     chrome::show_popup_below(&RawParent(window_ptr), more_ptr, theme, |popup| {
+        let files_copy = files.clone();
+        let name_copy = torrent_name.clone();
+        let theme_copy = theme.to_string();
+        let rpc_copy = rpc_url.clone();
+        chrome::popup_add_action(popup, &t("files_show"), true, move || {
+            let name = name_copy.clone();
+            let files = files_copy.clone();
+            let theme = theme_copy.clone();
+            let rpc = rpc_copy.clone();
+            chrome::defer(move || {
+                show_files(window_ptr, &name, torrent_id, &files, &theme, rpc.clone());
+            });
+        });
         let hash_copy = hash.clone();
         chrome::popup_add_action(popup, &t("copy_hash"), !hash.is_empty(), move || {
             clipboard::set_text(&hash_copy.to_lowercase());
@@ -658,6 +692,33 @@ fn show_actions(
             );
         });
     });
+}
+
+fn show_files(
+    window_ptr: usize,
+    name: &str,
+    torrent_id: i64,
+    files: &[TorrentFile],
+    theme: &str,
+    rpc_url: String,
+) {
+    chrome::files_exec(
+        window_ptr,
+        &stylesheet(theme),
+        name,
+        files,
+        move |index, wanted, priority| {
+            let result = TransmissionRPC::new(&rpc_url).and_then(|rpc| {
+                rpc.set_file_priority(torrent_id, i64::from(index), wanted != 0, i64::from(priority))
+                    .map_err(|err| err.0)
+            });
+            match result {
+                Ok(()) => 0,
+                Err(err) if rpc_method_unsupported(&err) => 1,
+                Err(_) => -1,
+            }
+        },
+    );
 }
 
 struct RawParent(usize);
