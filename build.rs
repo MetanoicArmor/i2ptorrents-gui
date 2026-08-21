@@ -1,3 +1,4 @@
+#[cfg(target_os = "macos")]
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -59,30 +60,34 @@ fn compile_qt_chrome() {
 }
 
 fn macos_qt_stubs() {
-    if std::env::var("CARGO_CFG_TARGET_OS").ok().as_deref() != Some("macos") {
-        return;
+    #[cfg(target_os = "macos")]
+    {
+        if std::env::var("CARGO_CFG_TARGET_OS").ok().as_deref() != Some("macos") {
+            return;
+        }
+        let Some(prefix) = macos_qt_prefix() else {
+            return;
+        };
+        let lib = prefix.join("lib");
+        let out = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("qt-macos-stubs");
+        let _ = fs::create_dir_all(&out);
+        for (name, framework) in [
+            ("libQt6Core.dylib", "QtCore"),
+            ("libQt6Gui.dylib", "QtGui"),
+            ("libQt6Widgets.dylib", "QtWidgets"),
+            ("libQt6UiTools.dylib", "QtUiTools"),
+        ] {
+            let dest = out.join(name);
+            let src = lib.join(format!("{framework}.framework/{framework}"));
+            let _ = fs::remove_file(&dest);
+            let _ = std::os::unix::fs::symlink(&src, &dest);
+        }
+        println!("cargo:rustc-link-search=native={}", out.display());
+        println!("cargo:rustc-link-arg=-F{}", lib.display());
     }
-    let Some(prefix) = macos_qt_prefix() else {
-        return;
-    };
-    let lib = prefix.join("lib");
-    let out = PathBuf::from(std::env::var("OUT_DIR").unwrap()).join("qt-macos-stubs");
-    let _ = fs::create_dir_all(&out);
-    for (name, framework) in [
-        ("libQt6Core.dylib", "QtCore"),
-        ("libQt6Gui.dylib", "QtGui"),
-        ("libQt6Widgets.dylib", "QtWidgets"),
-        ("libQt6UiTools.dylib", "QtUiTools"),
-    ] {
-        let dest = out.join(name);
-        let src = lib.join(format!("{framework}.framework/{framework}"));
-        let _ = fs::remove_file(&dest);
-        let _ = std::os::unix::fs::symlink(&src, &dest);
-    }
-    println!("cargo:rustc-link-search=native={}", out.display());
-    println!("cargo:rustc-link-arg=-F{}", lib.display());
 }
 
+#[cfg(target_os = "macos")]
 fn macos_qt_prefix() -> Option<PathBuf> {
     for candidate in ["/opt/homebrew", "/usr/local"] {
         let lib = PathBuf::from(candidate).join("lib/QtCore.framework/QtCore");
