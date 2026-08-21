@@ -18,6 +18,23 @@ use crate::{application_icon_path, version, APP_NAME};
 const ARROW_CURSOR: i32 = 0;
 const WHATS_THIS_CURSOR: i32 = 4;
 
+fn native_shortcut(seq: &str) -> String {
+    if cfg!(target_os = "macos") {
+        seq.replace("Ctrl+", "⌘")
+    } else {
+        seq.to_string()
+    }
+}
+
+fn tip_with_shortcuts(label_key: &str, sequences: &[&str]) -> String {
+    let shortcut = sequences
+        .iter()
+        .map(|seq| native_shortcut(seq))
+        .collect::<Vec<_>>()
+        .join(" / ");
+    t_args(label_key, &[("shortcut", &shortcut)])
+}
+
 enum WorkerMsg {
     Torrents(Result<Vec<Torrent>, String>),
     Added(Result<Option<String>, String>),
@@ -286,6 +303,10 @@ fn make_sidebar(
         .on_clicked(move || dispatch(&settings_slot, "settings"))
         .build();
     settings_btn.set_object_name("SettingsButton");
+    chrome::set_tooltip(
+        &settings_btn,
+        &tip_with_shortcuts("settings_tip", &["Ctrl+,", "Ctrl+S"]),
+    );
     let settings_ptr = settings_btn.widget_ptr() as usize;
     side.add(settings_btn);
     std::mem::forget(side);
@@ -338,6 +359,7 @@ fn make_surface(
         .on_clicked(move || dispatch(&add_slot, "add"))
         .build();
     add.set_object_name("Primary");
+    chrome::set_tooltip(&add, &tip_with_shortcuts("add_torrent_tip", &["Ctrl+T", "Ctrl+O"]));
     let add_ptr = add.widget_ptr() as usize;
     top_layout.add(add);
     std::mem::forget(top_layout);
@@ -383,7 +405,15 @@ fn apply_chrome(g: &mut Gui) {
     chrome::set_button_text(g.filter_ptrs[2], &t("filter_seeding"));
     set_status(g);
     chrome::set_button_text(g.add_ptr, &t("add_torrent"));
+    chrome::set_tooltip_ptr(
+        g.add_ptr,
+        &tip_with_shortcuts("add_torrent_tip", &["Ctrl+T", "Ctrl+O"]),
+    );
     chrome::set_button_text(g.settings_ptr, &t("settings"));
+    chrome::set_tooltip_ptr(
+        g.settings_ptr,
+        &tip_with_shortcuts("settings_tip", &["Ctrl+,", "Ctrl+S"]),
+    );
     chrome::set_button_text(g.about_ptr, &t("about"));
     chrome::set_placeholder_ptr(g.search_ptr, &t("search_placeholder"));
     chrome::set_tooltip_ptr(g.refresh_ptr, &t("refresh"));

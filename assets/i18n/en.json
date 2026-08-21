@@ -17,6 +17,8 @@
   "connecting": "Connecting…",
   "refresh": "Refresh",
   "add_torrent": "Add torrent",
+  "add_torrent_tip": "Add torrent ({shortcut})",
+  "settings_tip": "Settings ({shortcut})",
   "search_placeholder": "Search by name or info hash",
   "no_data": "No data",
   "updating": "Updating…",

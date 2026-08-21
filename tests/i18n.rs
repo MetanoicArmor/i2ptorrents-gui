@@ -5,6 +5,8 @@ fn default_language_is_english() {
     set_language("en");
     assert_eq!(t("settings"), "Settings");
     assert_eq!(t("add_torrent"), "Add torrent");
+    assert!(t("add_torrent_tip").contains("{shortcut}"));
+    assert!(t("settings_tip").contains("{shortcut}"));
 }
 
 #[test]
@@ -12,6 +14,8 @@ fn russian_language() {
     set_language("ru");
     assert_eq!(t("settings"), "Настройки");
     assert_eq!(t("add_torrent"), "Добавить торрент");
+    assert!(t("add_torrent_tip").contains("Добавить торрент"));
+    assert!(t("settings_tip").contains("Настройки"));
     set_language("en");
 }
 

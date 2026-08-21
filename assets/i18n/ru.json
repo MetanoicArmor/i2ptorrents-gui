@@ -17,6 +17,8 @@
   "connecting": "Подключение…",
   "refresh": "Обновить",
   "add_torrent": "Добавить торрент",
+  "add_torrent_tip": "Добавить торрент ({shortcut})",
+  "settings_tip": "Настройки ({shortcut})",
   "search_placeholder": "Поиск по имени или info hash",
   "no_data": "Нет данных",
   "updating": "Обновление…",
