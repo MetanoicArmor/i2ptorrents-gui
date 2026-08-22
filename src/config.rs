@@ -5,6 +5,11 @@ use serde::{Deserialize, Serialize};
 
 use crate::i18n::normalize_language;
 
+pub const MIN_WINDOW_WIDTH: u32 = 780;
+pub const MIN_WINDOW_HEIGHT: u32 = 520;
+pub const DEFAULT_WINDOW_WIDTH: u32 = 1080;
+pub const DEFAULT_WINDOW_HEIGHT: u32 = 700;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AppSettings {
     pub rpc_url: String,
@@ -14,6 +19,8 @@ pub struct AppSettings {
     pub language: String,
     pub torrent_view: String,
     pub http_proxy: String,
+    pub window_width: u32,
+    pub window_height: u32,
 }
 
 impl Default for AppSettings {
@@ -26,6 +33,8 @@ impl Default for AppSettings {
             language: "en".to_string(),
             torrent_view: "detailed".to_string(),
             http_proxy: "socks5://127.0.0.1:4447".to_string(),
+            window_width: DEFAULT_WINDOW_WIDTH,
+            window_height: DEFAULT_WINDOW_HEIGHT,
         }
     }
 }
@@ -72,6 +81,10 @@ impl AppSettings {
                 &defaults.torrent_view,
             )),
             http_proxy: migrate_proxy(&json_string(obj.get("http_proxy"), &defaults.http_proxy)),
+            window_width: json_u32(obj.get("window_width"), DEFAULT_WINDOW_WIDTH)
+                .max(MIN_WINDOW_WIDTH),
+            window_height: json_u32(obj.get("window_height"), DEFAULT_WINDOW_HEIGHT)
+                .max(MIN_WINDOW_HEIGHT),
         }
     }
 
@@ -93,6 +106,18 @@ impl AppSettings {
 
     pub fn save(&self) -> std::io::Result<()> {
         self.save_to(&config_dir().join("settings.json"))
+    }
+
+    pub fn window_size(&self) -> (i32, i32) {
+        (
+            self.window_width.max(MIN_WINDOW_WIDTH) as i32,
+            self.window_height.max(MIN_WINDOW_HEIGHT) as i32,
+        )
+    }
+
+    pub fn capture_window_size(&mut self, width: i32, height: i32) {
+        self.window_width = (width.max(0) as u32).max(MIN_WINDOW_WIDTH);
+        self.window_height = (height.max(0) as u32).max(MIN_WINDOW_HEIGHT);
     }
 
     pub fn torrents_path(&mut self) -> std::io::Result<PathBuf> {
@@ -143,6 +168,16 @@ fn expand_user(value: &str) -> PathBuf {
         return dirs_home();
     }
     PathBuf::from(raw)
+}
+
+fn json_u32(value: Option<&serde_json::Value>, default: u32) -> u32 {
+    value
+        .and_then(|v| {
+            v.as_u64()
+                .or_else(|| v.as_str().and_then(|s| s.parse().ok()))
+        })
+        .map(|n| n as u32)
+        .unwrap_or(default)
 }
 
 fn json_string(value: Option<&serde_json::Value>, default: &str) -> String {

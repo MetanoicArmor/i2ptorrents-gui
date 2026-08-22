@@ -7,7 +7,7 @@ use std::thread;
 use qtrs::prelude::*;
 use qtrs::{clipboard, desktopservices, warning, MessageBox, Spacer, SpacerExt};
 
-use crate::config::AppSettings;
+use crate::config::{AppSettings, MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH};
 use crate::i18n::{language, set_language, t, t_args};
 use crate::models::{format_bytes, format_rate, Torrent, TorrentStatus};
 use crate::qt_chrome as chrome;
@@ -74,14 +74,15 @@ pub fn run() -> i32 {
         app.set_icon(&icon.to_string_lossy());
     }
     chrome::apply_app_font();
+    let settings = AppSettings::load();
+    let (width, height) = settings.window_size();
     let window = Widget::new()
         .title(&format!("{APP_NAME} {}", version()))
-        .size(1080, 700)
+        .size(width, height)
         .build();
     window.set_object_name("MainWindow");
-    window.set_min_size(780, 520);
+    window.set_min_size(MIN_WINDOW_WIDTH as i32, MIN_WINDOW_HEIGHT as i32);
 
-    let settings = AppSettings::load();
     set_language(&settings.language);
     window.set_style_sheet(&stylesheet(&settings.theme));
     chrome::install_rounded_tooltips();
@@ -166,6 +167,12 @@ pub fn run() -> i32 {
     }
 
     let code = app.exec();
+    if let Ok(mut g) = gui.try_borrow_mut() {
+        let width = g.window.width();
+        let height = g.window.height();
+        g.settings.capture_window_size(width, height);
+        let _ = g.settings.save();
+    }
     std::mem::forget(outer);
     std::mem::forget(gui);
     std::mem::forget(holder);
@@ -972,6 +979,9 @@ fn open_settings(gui: &Rc<RefCell<Gui>>) {
             &t_args("torrents_dir_error", &[("error", &err.to_string())]),
         );
     }
+    let width = g.window.width();
+    let height = g.window.height();
+    g.settings.capture_window_size(width, height);
     let _ = g.settings.save();
     g.timer
         .start((g.settings.refresh_seconds.max(2) * 1000) as i32);

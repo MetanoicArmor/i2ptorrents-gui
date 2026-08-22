@@ -96,22 +96,37 @@ QScrollBar::handle:vertical {
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
 QCheckBox { spacing: 8px; }
+QWidget#FilesTablePane { background: transparent; border: none; }
 QTableWidget#FilesTable {
-    background: #ffffff; border: none; gridline-color: transparent;
-    alternate-background-color: #f4f6fa;
+    background: #f2f2f7; border: none; border-radius: 0px;
+    gridline-color: transparent; outline: 0;
+    alternate-background-color: #e8e8ed;
 }
-QTableWidget#FilesTable::item { padding: 6px 8px; }
+QTableWidget#FilesTable::item {
+    padding: 0px; border: none; color: #1d1d1f;
+}
 QTableWidget#FilesTable QLabel#FilesName {
-    background: transparent;
+    background: transparent; color: #1d1d1f;
 }
-QTableWidget#FilesTable QComboBox {
-    padding: 2px 8px; min-width: 0px;
+QTableWidget#FilesTable QWidget#FilesPriorityCell {
+    background: transparent; border: none;
 }
-QTableWidget#FilesTable QComboBox::drop-down {
-    width: 16px;
+QTableWidget#FilesTable QToolButton#FilesPriority {
+    background: #ffffff; border: none; border-radius: 6px;
+    padding: 4px 10px; min-height: 22px; color: #1d1d1f;
 }
-QHeaderView::section {
-    background: transparent; color: #626875; border: none; padding: 8px;
+QTableWidget#FilesTable QToolButton#FilesPriority:hover { background: #f2f2f7; }
+QTableWidget#FilesTable QToolButton#FilesPriority:disabled { background: #e8e8ed; color: #8e8e93; }
+QTableWidget#FilesTable QToolButton#FilesPriority::menu-indicator {
+    image: none; width: 0px; height: 0px;
+}
+QTableWidget#FilesTable QHeaderView {
+    background: #e8e8ed; border: none;
+}
+QTableWidget#FilesTable QHeaderView::section {
+    background: #e8e8ed; color: #6e6e73;
+    border: none; border-right: none;
+    border-bottom: 1px solid #d0d0d5; padding: 8px 10px;
     font-weight: 600; font-size: 12px;
 }
 

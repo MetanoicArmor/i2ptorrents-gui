@@ -12,6 +12,8 @@ fn settings_roundtrip() {
         language: "en".into(),
         torrent_view: "simple".into(),
         http_proxy: "socks5://127.0.0.1:4447".into(),
+        window_width: 1080,
+        window_height: 700,
     };
     expected.save_to(&path).unwrap();
     assert_eq!(AppSettings::load_from(&path), expected);
@@ -73,4 +75,40 @@ fn torrents_path_creates_directory() {
     };
     assert_eq!(settings.torrents_path().unwrap(), folder);
     assert!(folder.is_dir());
+}
+
+#[test]
+fn window_size_roundtrip() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("settings.json");
+    AppSettings {
+        window_width: 1440,
+        window_height: 900,
+        ..AppSettings::default()
+    }
+    .save_to(&path)
+    .unwrap();
+    let loaded = AppSettings::load_from(&path);
+    assert_eq!(loaded.window_width, 1440);
+    assert_eq!(loaded.window_height, 900);
+}
+
+#[test]
+fn window_size_defaults_when_missing() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("settings.json");
+    std::fs::write(&path, r#"{"language": "ru"}"#).unwrap();
+    let loaded = AppSettings::load_from(&path);
+    assert_eq!(loaded.window_width, 1080);
+    assert_eq!(loaded.window_height, 700);
+}
+
+#[test]
+fn window_size_clamps_minimum() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("settings.json");
+    std::fs::write(&path, r#"{"window_width": 100, "window_height": 50}"#).unwrap();
+    let loaded = AppSettings::load_from(&path);
+    assert_eq!(loaded.window_width, 780);
+    assert_eq!(loaded.window_height, 520);
 }

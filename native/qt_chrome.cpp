@@ -7,7 +7,9 @@
 #include <QAbstractAnimation>
 #include <QAbstractButton>
 #include <QAbstractSpinBox>
+#include <QAction>
 #include <QApplication>
+#include <QBitmap>
 #include <QCheckBox>
 #include <QColor>
 #include <QComboBox>
@@ -33,6 +35,7 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QListWidgetItem>
+#include <QMenu>
 #include <QMessageBox>
 #include <QMouseEvent>
 #include <QObject>
@@ -57,7 +60,9 @@
 #include <QSizePolicy>
 #include <QSpinBox>
 #include <QStyle>
+#include <QStyleFactory>
 #include <QStyledItemDelegate>
+#include <QStyleOptionToolButton>
 #include <QStyleOptionViewItem>
 #include <QTableWidget>
 #include <QTableWidgetItem>
@@ -212,6 +217,8 @@ struct DialogMetrics {
     static constexpr int kButtonGap = 8;
     static constexpr int kQrSide = 160;
     static constexpr int kFilesHeaderMinH = 32;
+    static constexpr int kFilesTableEdge = 1;
+    static constexpr qreal kFilesTableRadius = 10;
     static constexpr int kFilesProgressPad = 20;
     static constexpr int kFilesPriorityPad = 56;
     static constexpr int kFilesPriorityCellPad = 8;
@@ -319,11 +326,10 @@ void measure_and_lock_dialog(QDialog *dialog, int wrapped_inner_w) {
         button->setFixedSize(button->sizeHint());
     }
     for (QComboBox *combo : dialog->findChildren<QComboBox *>()) {
-        combo->adjustSize();
         if (is_table_descendant(combo)) {
-            combo->setFixedHeight(combo->sizeHint().height());
             continue;
         }
+        combo->adjustSize();
         combo->setFixedSize(combo->sizeHint());
     }
     for (QAbstractSpinBox *spin : dialog->findChildren<QAbstractSpinBox *>()) {
@@ -1215,12 +1221,13 @@ public:
         setContentsMargins(pad_x_, pad_y_, pad_x_, pad_y_);
         setAttribute(Qt::WA_OpaquePaintEvent, true);
         setAutoFillBackground(false);
+        setAttribute(Qt::WA_StyledBackground, false);
     }
 
     bool hasHeightForWidth() const override { return true; }
 
     int heightForWidth(int w) const override {
-        const int text_w = std::max(1, w - pad_x_ * 2 - extraBearing());
+        const int text_w = std::max(1, w - pad_x_ * 2 - extraBearing() - 4);
         return std::max(40, textHeight(text_w) + pad_y_ * 2);
     }
 
@@ -1235,6 +1242,7 @@ protected:
     void paintEvent(QPaintEvent *) override {
         QPainter painter(this);
         painter.setRenderHint(QPainter::TextAntialiasing, true);
+        painter.setClipRect(rect());
         painter.fillRect(rect(), rowBackground());
         painter.setPen(palette().color(QPalette::WindowText));
         const QRect inner = contentsRect().adjusted(extraBearing(), 0, 0, 0);
@@ -1251,7 +1259,7 @@ protected:
 private:
     void fillLayout(QTextLayout *layout, int width) const {
         QTextOption option;
-        option.setWrapMode(QTextOption::WrapAnywhere);
+        option.setWrapMode(QTextOption::WrapAtWordBoundaryOrAnywhere);
         option.setAlignment(Qt::AlignLeft | Qt::AlignTop);
         layout->setTextOption(option);
         const QFontMetricsF fm(font());
@@ -1301,17 +1309,275 @@ private:
     int textHeight(int width) const {
         QTextLayout layout(text(), font());
         fillLayout(&layout, width);
+        const QFontMetricsF fm(font());
         if (layout.lineCount() == 0) {
-            return static_cast<int>(std::ceil(QFontMetricsF(font()).lineSpacing()));
+            return static_cast<int>(std::ceil(fm.lineSpacing() + fm.descent()));
         }
         const QTextLine last = layout.lineAt(layout.lineCount() - 1);
-        const qreal bottom = last.y() + std::max(last.height(), QFontMetricsF(font()).lineSpacing());
-        return static_cast<int>(std::ceil(bottom + 2));
+        return static_cast<int>(std::ceil(last.y() + last.height() + fm.descent() + 2));
     }
 
     static constexpr int pad_x_ = 8;
     static constexpr int pad_y_ = 8;
 };
+
+class FilesItemDelegate final : public QStyledItemDelegate {
+public:
+    explicit FilesItemDelegate(QObject *parent = nullptr) : QStyledItemDelegate(parent) {}
+
+protected:
+    void initStyleOption(QStyleOptionViewItem *option, const QModelIndex &index) const override {
+        QStyledItemDelegate::initStyleOption(option, index);
+        option->rect.adjust(8, 0, -8, 0);
+        option->state &= ~QStyle::State_HasFocus;
+    }
+};
+
+class FilesPriorityButton final : public QToolButton {
+public:
+    std::function<void(int)> on_changed;
+
+    FilesPriorityButton(const QStringList &labels, int index, QWidget *parent = nullptr)
+        : QToolButton(parent) {
+        setObjectName(QStringLiteral("FilesPriority"));
+        setPopupMode(QToolButton::InstantPopup);
+        setToolButtonStyle(Qt::ToolButtonTextOnly);
+        setAutoRaise(false);
+        setFocusPolicy(Qt::NoFocus);
+        setCursor(Qt::PointingHandCursor);
+        setAttribute(Qt::WA_MacShowFocusRect, false);
+        setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+
+        auto *menu = new QMenu(this);
+        for (int i = 0; i < labels.size(); ++i) {
+            QAction *action = menu->addAction(labels.at(i));
+            action->setData(i);
+        }
+        setMenu(menu);
+        applyIndex(index);
+
+        QObject::connect(menu, &QMenu::triggered, this, [this](QAction *action) {
+            const int index = action->data().toInt();
+            if (index == current_) {
+                return;
+            }
+            applyIndex(index);
+            if (on_changed) {
+                on_changed(index);
+            }
+        });
+    }
+
+    int currentIndex() const { return current_; }
+
+    void revertTo(int index) { applyIndex(index); }
+
+private:
+    void applyIndex(int index) {
+        current_ = index;
+        if (QMenu *menu = this->menu()) {
+            const QList<QAction *> actions = menu->actions();
+            if (index >= 0 && index < actions.size()) {
+                setText(actions.at(index)->text());
+            }
+        }
+    }
+
+    int current_ = 0;
+};
+
+class FilesCornerCap final : public QWidget {
+public:
+    enum class Corner { TopLeft, TopRight, BottomLeft, BottomRight };
+
+    FilesCornerCap(Corner corner, const QColor &fill, QWidget *parent)
+        : QWidget(parent), corner_(corner), fill_(fill) {
+        setAttribute(Qt::WA_TransparentForMouseEvents, true);
+        setAttribute(Qt::WA_OpaquePaintEvent, true);
+        setAutoFillBackground(false);
+        setFocusPolicy(Qt::NoFocus);
+#ifdef Q_OS_MAC
+        setAttribute(Qt::WA_NativeWindow, true);
+        setAttribute(Qt::WA_DontCreateNativeAncestors, true);
+#endif
+        const int side = static_cast<int>(std::ceil(DialogMetrics::kFilesTableRadius)) + 2;
+        setFixedSize(side, side);
+    }
+
+    void relayout(const QSize &pane) {
+        const int s = width();
+        switch (corner_) {
+        case Corner::TopLeft:
+            move(0, 0);
+            break;
+        case Corner::TopRight:
+            move(pane.width() - s, 0);
+            break;
+        case Corner::BottomLeft:
+            move(0, pane.height() - s);
+            break;
+        case Corner::BottomRight:
+            move(pane.width() - s, pane.height() - s);
+            break;
+        }
+        updateMask();
+        raise();
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override {
+        QPainter painter(this);
+        painter.fillRect(rect(), fill_);
+    }
+
+    void resizeEvent(QResizeEvent *event) override {
+        QWidget::resizeEvent(event);
+        updateMask();
+    }
+
+private:
+    QPainterPath wedge() const {
+        const qreal r = DialogMetrics::kFilesTableRadius;
+        const QRectF box = QRectF(rect());
+        QPainterPath square;
+        square.addRect(box);
+        QPainterPath disk;
+        switch (corner_) {
+        case Corner::TopLeft:
+            disk.addEllipse(QRectF(0.0, 0.0, r * 2.0, r * 2.0));
+            break;
+        case Corner::TopRight:
+            disk.addEllipse(QRectF(box.width() - r * 2.0, 0.0, r * 2.0, r * 2.0));
+            break;
+        case Corner::BottomLeft:
+            disk.addEllipse(QRectF(0.0, box.height() - r * 2.0, r * 2.0, r * 2.0));
+            break;
+        case Corner::BottomRight:
+            disk.addEllipse(QRectF(box.width() - r * 2.0, box.height() - r * 2.0, r * 2.0, r * 2.0));
+            break;
+        }
+        return square.subtracted(disk);
+    }
+
+    void updateMask() {
+        if (width() < 2 || height() < 2) {
+            return;
+        }
+        setMask(QRegion(wedge().toFillPolygon().toPolygon()));
+    }
+
+    Corner corner_;
+    QColor fill_;
+};
+
+#ifdef Q_OS_MAC
+void clip_native_rounded(QWidget *widget, unsigned int border_rgb, int which) {
+    if (widget == nullptr) {
+        return;
+    }
+    widget->setAttribute(Qt::WA_NativeWindow, true);
+    i2p_macos_nsview_clip_rounded(reinterpret_cast<void *>(widget->winId()), DialogMetrics::kFilesTableRadius,
+                                  border_rgb, which);
+}
+#endif
+
+class FilesTablePane final : public QWidget {
+public:
+    explicit FilesTablePane(QWidget *parent, bool night) : QWidget(parent), night_(night) {
+        setObjectName(QStringLiteral("FilesTablePane"));
+#ifdef Q_OS_MAC
+        setAttribute(Qt::WA_NativeWindow, true);
+        setAttribute(Qt::WA_DontCreateNativeAncestors, true);
+#endif
+        const QColor fill = night_ ? QColor(0x1c, 0x1c, 0x1e) : QColor(0xff, 0xff, 0xff);
+        caps_[0] = new FilesCornerCap(FilesCornerCap::Corner::TopLeft, fill, this);
+        caps_[1] = new FilesCornerCap(FilesCornerCap::Corner::TopRight, fill, this);
+        caps_[2] = new FilesCornerCap(FilesCornerCap::Corner::BottomLeft, fill, this);
+        caps_[3] = new FilesCornerCap(FilesCornerCap::Corner::BottomRight, fill, this);
+    }
+
+    void applyClip() {
+#ifdef Q_OS_MAC
+        clip_native_rounded(this, night_ ? 0x48484au : 0xd0d0d5u, 0);
+        for (QTableWidget *table : findChildren<QTableWidget *>()) {
+            clip_native_rounded(table, 0, 0);
+            clip_native_rounded(table->viewport(), 0, 2);
+            clip_native_rounded(table->horizontalHeader(), 0, 1);
+        }
+#else
+        if (width() >= 2 && height() >= 2) {
+            QPainterPath path;
+            path.addRoundedRect(QRectF(rect()), DialogMetrics::kFilesTableRadius,
+                                DialogMetrics::kFilesTableRadius);
+            setMask(QRegion(path.toFillPolygon().toPolygon()));
+        }
+#endif
+        for (FilesCornerCap *cap : caps_) {
+            cap->relayout(size());
+        }
+    }
+
+protected:
+    void showEvent(QShowEvent *event) override {
+        QWidget::showEvent(event);
+        applyClip();
+    }
+
+    void resizeEvent(QResizeEvent *event) override {
+        QWidget::resizeEvent(event);
+        applyClip();
+    }
+
+private:
+    bool night_ = true;
+    FilesCornerCap *caps_[4] = {};
+};
+
+void style_files_table(QTableWidget *table, const QWidget *host) {
+    if (table == nullptr) {
+        return;
+    }
+    table->setFrameShape(QFrame::NoFrame);
+    table->setFrameShadow(QFrame::Plain);
+    table->setLineWidth(0);
+    table->setAttribute(Qt::WA_StyledBackground, true);
+    table->viewport()->setAutoFillBackground(true);
+    table->setItemDelegate(new FilesItemDelegate(table));
+
+    if (QStyle *fusion = QStyleFactory::create(QStringLiteral("Fusion"))) {
+        fusion->setParent(table);
+        table->setStyle(fusion);
+        table->horizontalHeader()->setStyle(fusion);
+        table->verticalHeader()->setStyle(fusion);
+        table->viewport()->setStyle(fusion);
+    }
+
+    QHeaderView *header = table->horizontalHeader();
+    header->setHighlightSections(false);
+    header->setSectionsClickable(false);
+    header->setAttribute(Qt::WA_StyledBackground, true);
+    header->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+
+    const QString css = host != nullptr ? host->styleSheet() : QString();
+    const bool night = css.contains(QLatin1String("#1c1c1e"));
+    const QColor base = night ? QColor(0x2c, 0x2c, 0x2e) : QColor(0xf2, 0xf2, 0xf7);
+    const QColor alt = night ? QColor(0x3a, 0x3a, 0x3c) : QColor(0xe8, 0xe8, 0xed);
+    const QColor text = night ? QColor(0xf5, 0xf5, 0xf7) : QColor(0x1d, 0x1d, 0x1f);
+    const QColor header_fg = night ? QColor(0xa1, 0xa1, 0xa6) : QColor(0x6e, 0x6e, 0x73);
+    QPalette pal = table->palette();
+    for (auto group : {QPalette::Active, QPalette::Inactive, QPalette::Disabled}) {
+        pal.setColor(group, QPalette::Base, base);
+        pal.setColor(group, QPalette::AlternateBase, alt);
+        pal.setColor(group, QPalette::Text, text);
+        pal.setColor(group, QPalette::Window, base);
+        pal.setColor(group, QPalette::WindowText, text);
+        pal.setColor(group, QPalette::Button, alt);
+        pal.setColor(group, QPalette::ButtonText, header_fg);
+    }
+    table->setPalette(pal);
+    table->viewport()->setPalette(pal);
+    header->setPalette(pal);
+}
 
 void layout_files_table(QTableWidget *table, QVBoxLayout *layout, int dialog_w, int dialog_h, QLabel *note,
                         int button_row_h, const QString &progress_header) {
@@ -1340,7 +1606,8 @@ void layout_files_table(QTableWidget *table, QVBoxLayout *layout, int dialog_w, 
     header->setFixedHeight(std::max(DialogMetrics::kFilesHeaderMinH, header->sizeHint().height()));
     const int header_h = header->height();
 
-    const int table_inner = std::max(80, inner_w - table->frameWidth() * 2);
+    const int table_inner =
+        std::max(80, inner_w - DialogMetrics::kFilesTableEdge * 2);
 
     table->resizeColumnToContents(1);
     const int col_size = table->columnWidth(1);
@@ -1353,9 +1620,9 @@ void layout_files_table(QTableWidget *table, QVBoxLayout *layout, int dialog_w, 
     int col_priority = 0;
     for (int row = 0; row < table->rowCount(); ++row) {
         if (QWidget *cell = table->cellWidget(row, 3)) {
-            if (QComboBox *combo = cell->findChild<QComboBox *>()) {
+            if (QToolButton *button = cell->findChild<QToolButton *>(QStringLiteral("FilesPriority"))) {
                 col_priority =
-                    std::max(col_priority, combo->sizeHint().width() + DialogMetrics::kFilesPriorityCellPad);
+                    std::max(col_priority, button->sizeHint().width() + DialogMetrics::kFilesPriorityCellPad);
             }
         }
     }
@@ -1384,11 +1651,18 @@ void layout_files_table(QTableWidget *table, QVBoxLayout *layout, int dialog_w, 
         rows_h += table->rowHeight(row);
     }
 
-    const int content_table_h = header_h + rows_h;
+    const int content_table_h = header_h + rows_h + DialogMetrics::kFilesTableEdge * 2;
     const bool need_scroll = content_table_h > max_table_h;
     const int table_h = need_scroll ? max_table_h : content_table_h;
     table->setFixedSize(inner_w, table_h);
     table->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    if (QWidget *parent = table->parentWidget()) {
+        if (parent->objectName() == QLatin1String("FilesTablePane")) {
+            parent->setFixedSize(inner_w, table_h);
+            parent->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+            static_cast<FilesTablePane *>(parent)->applyClip();
+        }
+    }
     table->setVerticalScrollBarPolicy(need_scroll ? Qt::ScrollBarAsNeeded : Qt::ScrollBarAlwaysOff);
     if (need_scroll) {
         set_name_column(scrollbar_w);
@@ -1461,6 +1735,54 @@ private:
     QFrame *row_ = nullptr;
 };
 
+class SpinStepButton final : public QToolButton {
+public:
+    enum class Direction { Up, Down };
+
+    explicit SpinStepButton(Direction direction, QWidget *parent = nullptr)
+        : QToolButton(parent), direction_(direction) {
+        setAutoRaise(true);
+        setToolButtonStyle(Qt::ToolButtonIconOnly);
+        setCursor(Qt::ArrowCursor);
+        setAutoRepeat(true);
+        setAutoRepeatDelay(400);
+        setAutoRepeatInterval(120);
+        setFocusPolicy(Qt::NoFocus);
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override {
+        QStyleOptionToolButton option;
+        initStyleOption(&option);
+        option.text.clear();
+        option.icon = QIcon();
+        QPainter painter(this);
+        style()->drawComplexControl(QStyle::CC_ToolButton, &option, &painter, this);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        const QColor color = palette().color(foregroundRole());
+        QPen pen(color, 1.4, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+        painter.setPen(pen);
+        painter.setBrush(Qt::NoBrush);
+        const qreal cx = width() / 2.0;
+        const qreal cy = height() / 2.0;
+        const qreal span = 3.6;
+        QPainterPath path;
+        if (direction_ == Direction::Up) {
+            path.moveTo(cx - span, cy + 1.4);
+            path.lineTo(cx, cy - 1.6);
+            path.lineTo(cx + span, cy + 1.4);
+        } else {
+            path.moveTo(cx - span, cy - 1.4);
+            path.lineTo(cx, cy + 1.6);
+            path.lineTo(cx + span, cy - 1.4);
+        }
+        painter.drawPath(path);
+    }
+
+private:
+    Direction direction_;
+};
+
 class SpinRowWidget final : public QFrame {
 public:
     explicit SpinRowWidget(QWidget *parent = nullptr) : QFrame(parent) {
@@ -1478,21 +1800,10 @@ public:
         auto *steps = new QVBoxLayout(step_col);
         steps->setContentsMargins(0, 0, 0, 0);
         steps->setSpacing(0);
-        auto *up = new QToolButton(step_col);
+        auto *up = new SpinStepButton(SpinStepButton::Direction::Up, step_col);
         up->setObjectName(QStringLiteral("SpinStepUp"));
-        auto *down = new QToolButton(step_col);
+        auto *down = new SpinStepButton(SpinStepButton::Direction::Down, step_col);
         down->setObjectName(QStringLiteral("SpinStepDown"));
-        for (auto *button : {up, down}) {
-            button->setAutoRaise(true);
-            button->setToolButtonStyle(Qt::ToolButtonTextOnly);
-            button->setCursor(Qt::ArrowCursor);
-            button->setAutoRepeat(true);
-            button->setAutoRepeatDelay(400);
-            button->setAutoRepeatInterval(120);
-            button->setFocusPolicy(Qt::NoFocus);
-        }
-        up->setText(QString::fromUtf8("⌃"));
-        down->setText(QString::fromUtf8("⌄"));
         QObject::connect(up, &QToolButton::clicked, this, [this] {
             spin_->stepUp();
             spin_->setFocus(Qt::OtherFocusReason);
@@ -2327,7 +2638,7 @@ void i2p_files_exec(void *parent, const i2p_files_in *in, i2p_file_change_cb cb,
     layout->addWidget(note);
 
     QTableWidget *files_table = nullptr;
-    std::vector<QComboBox *> combos;
+    std::vector<FilesPriorityButton *> priority_buttons;
 
     if (in->file_count <= 0) {
         auto *empty = new QLabel(qstr(in->empty), &dialog);
@@ -2335,8 +2646,15 @@ void i2p_files_exec(void *parent, const i2p_files_in *in, i2p_file_change_cb cb,
         empty->setWordWrap(true);
         layout->addWidget(empty);
     } else {
-        auto *table = new QTableWidget(in->file_count, 4, &dialog);
+        const bool night = dialog.styleSheet().contains(QLatin1String("#1c1c1e"));
+        auto *pane = new FilesTablePane(&dialog, night);
+        auto *pane_layout = new QVBoxLayout(pane);
+        pane_layout->setContentsMargins(0, 0, 0, 0);
+        pane_layout->setSpacing(0);
+
+        auto *table = new QTableWidget(in->file_count, 4, pane);
         table->setObjectName(QStringLiteral("FilesTable"));
+        style_files_table(table, &dialog);
         table->setHorizontalHeaderLabels({qstr(in->col_name), qstr(in->col_size), qstr(in->col_progress),
                                           qstr(in->col_priority)});
         table->verticalHeader()->setVisible(false);
@@ -2364,7 +2682,7 @@ void i2p_files_exec(void *parent, const i2p_files_in *in, i2p_file_change_cb cb,
         }
 
         files_table = table;
-        combos.reserve(static_cast<size_t>(in->file_count));
+        priority_buttons.reserve(static_cast<size_t>(in->file_count));
         for (int row = 0; row < in->file_count; ++row) {
             const i2p_file_row &file = in->files[row];
             const QString name = qstr(file.name);
@@ -2383,62 +2701,59 @@ void i2p_files_exec(void *parent, const i2p_files_in *in, i2p_file_change_cb cb,
             add_text(1, file.size);
             add_text(2, file.progress);
 
-            auto *combo = new QComboBox(table);
-            combo->addItem(priority_labels[0], 0);
-            combo->addItem(priority_labels[1], -1);
-            combo->addItem(priority_labels[2], 0);
-            combo->addItem(priority_labels[3], 1);
-            combo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
-            combo->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
-            combo->setMinimumWidth(priority_text_w + 48);
-            combo->setToolTip(tip);
             const int start = file_combo_index(file.wanted, file.priority);
-            combo->setCurrentIndex(start);
-            combo->setProperty("prev", start);
-            combo->setProperty("fileIndex", file.index);
+            auto *priority = new FilesPriorityButton(priority_labels, start, table);
+            if (QStyle *style = table->style()) {
+                priority->setStyle(style);
+            }
+            priority->setMinimumWidth(priority_text_w + 36);
+            priority->setToolTip(tip);
+            priority->setProperty("prev", start);
+            priority->setProperty("fileIndex", file.index);
 
             auto *priority_cell = new QWidget(table);
+            priority_cell->setObjectName(QStringLiteral("FilesPriorityCell"));
+            priority_cell->setAttribute(Qt::WA_TranslucentBackground, true);
+            priority_cell->setAutoFillBackground(false);
             auto *priority_layout = new QVBoxLayout(priority_cell);
             priority_layout->setContentsMargins(2, 4, 2, 4);
             priority_layout->setSpacing(0);
             priority_layout->addStretch();
-            priority_layout->addWidget(combo);
+            priority_layout->addWidget(priority, 0, Qt::AlignHCenter);
             priority_layout->addStretch();
             table->setCellWidget(row, 3, priority_cell);
-            combos.push_back(combo);
+            priority_buttons.push_back(priority);
         }
 
         const QString unsupported = qstr(in->unsupported_note);
-        for (QComboBox *combo : combos) {
-            QObject::connect(combo, QOverload<int>::of(&QComboBox::currentIndexChanged),
-                             [combo, &combos, note, unsupported, cb, ctx](int index) {
-                                 if (cb == nullptr) {
-                                     return;
-                                 }
-                                 const int wanted = index == 0 ? 0 : 1;
-                                 int priority = 0;
-                                 if (index == 1) {
-                                     priority = -1;
-                                 } else if (index == 3) {
-                                     priority = 1;
-                                 }
-                                 const int rc = cb(ctx, combo->property("fileIndex").toInt(), wanted, priority);
-                                 if (rc == 0) {
-                                     combo->setProperty("prev", index);
-                                     return;
-                                 }
-                                 combo->blockSignals(true);
-                                 combo->setCurrentIndex(combo->property("prev").toInt());
-                                 combo->blockSignals(false);
-                                 if (rc == 1) {
-                                     note->setText(unsupported);
-                                     for (QComboBox *item : combos) {
-                                         item->setEnabled(false);
-                                     }
-                                 }
-                             });
+        for (FilesPriorityButton *button : priority_buttons) {
+            button->on_changed = [button, &priority_buttons, note, unsupported, cb, ctx](int index) {
+                if (cb == nullptr) {
+                    return;
+                }
+                const int wanted = index == 0 ? 0 : 1;
+                int priority = 0;
+                if (index == 1) {
+                    priority = -1;
+                } else if (index == 3) {
+                    priority = 1;
+                }
+                const int rc = cb(ctx, button->property("fileIndex").toInt(), wanted, priority);
+                if (rc == 0) {
+                    button->setProperty("prev", index);
+                    return;
+                }
+                button->revertTo(button->property("prev").toInt());
+                if (rc == 1) {
+                    note->setText(unsupported);
+                    for (FilesPriorityButton *item : priority_buttons) {
+                        item->setEnabled(false);
+                    }
+                }
+            };
         }
-        layout->addWidget(table);
+        pane_layout->addWidget(table);
+        layout->addWidget(pane);
     }
 
     auto *close = new QPushButton(qstr(in->close), &dialog);

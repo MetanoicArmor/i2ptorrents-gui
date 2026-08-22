@@ -32,6 +32,36 @@ void i2p_macos_nsview_round_corners(void *nsview, int left_side) {
     i2p_round_view(view, kI2pWindowRadius, corners);
 }
 
+void i2p_macos_nsview_clip_rounded(void *nsview, double radius, unsigned int border_rgb, int which) {
+    if (nsview == nullptr) {
+        return;
+    }
+    NSView *view = (__bridge NSView *)nsview;
+    view.wantsLayer = YES;
+    view.clipsToBounds = YES;
+    view.layer.cornerRadius = radius;
+    view.layer.masksToBounds = YES;
+    if (border_rgb != 0) {
+        view.layer.borderWidth = 1.0;
+        const CGFloat r = ((border_rgb >> 16) & 0xff) / 255.0;
+        const CGFloat g = ((border_rgb >> 8) & 0xff) / 255.0;
+        const CGFloat b = (border_rgb & 0xff) / 255.0;
+        view.layer.borderColor = [[NSColor colorWithSRGBRed:r green:g blue:b alpha:1.0] CGColor];
+    } else {
+        view.layer.borderWidth = 0.0;
+    }
+    if (@available(macOS 10.13, *)) {
+        CACornerMask corners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner | kCALayerMinXMaxYCorner |
+                               kCALayerMaxXMaxYCorner;
+        if (which == 1) {
+            corners = kCALayerMinXMaxYCorner | kCALayerMaxXMaxYCorner;
+        } else if (which == 2) {
+            corners = kCALayerMinXMinYCorner | kCALayerMaxXMinYCorner;
+        }
+        view.layer.maskedCorners = corners;
+    }
+}
+
 void i2p_macos_nsview_apply_vibrancy(void *nsview, int night, int dialog) {
     if (nsview == nullptr) {
         return;
