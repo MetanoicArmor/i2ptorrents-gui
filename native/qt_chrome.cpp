@@ -16,7 +16,6 @@
 #include <QEvent>
 #include <QFont>
 #include <QFontMetrics>
-#include <QEventLoop>
 #include <QFrame>
 #include <climits>
 #include <QGuiApplication>
@@ -91,16 +90,39 @@ QString qstr(const char *text) { return QString::fromUtf8(text ? text : ""); }
 
 void update_popup_rounded_mask(QWidget *widget, qreal radius);
 
+Qt::WindowFlags hosted_dialog_flags() {
+    Qt::WindowFlags flags = Qt::Dialog | Qt::WindowTitleHint | Qt::WindowSystemMenuHint |
+                            Qt::WindowCloseButtonHint;
+#ifdef Q_OS_MAC
+    flags |= Qt::Window;
+#endif
+    return flags;
+}
+
+void prepare_hosted_dialog(QDialog *dialog) {
+    if (dialog == nullptr) {
+        return;
+    }
+    dialog->setModal(true);
+    dialog->setWindowModality(Qt::ApplicationModal);
+    dialog->setSizeGripEnabled(false);
+}
+
 void apply_real_dialog_window(QDialog *dialog) {
     if (dialog == nullptr) {
         return;
     }
     Qt::WindowFlags flags = Qt::Dialog | Qt::WindowTitleHint | Qt::WindowSystemMenuHint |
-                            Qt::WindowCloseButtonHint;
+                            Qt::WindowCloseButtonHint | Qt::MSWindowsFixedSizeDialogHint;
+#ifdef Q_OS_MAC
+    flags |= Qt::Window;
+#endif
     dialog->setWindowFlags(flags);
     dialog->setModal(true);
     dialog->setWindowModality(Qt::ApplicationModal);
     dialog->setSizeGripEnabled(false);
+    dialog->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    dialog->setAttribute(Qt::WA_ContentsMarginsRespectsSafeArea, false);
 }
 
 struct DialogMetrics {
@@ -238,16 +260,6 @@ void measure_and_lock_dialog(QDialog *dialog, int wrapped_inner_w) {
 void layout_files_table(QTableWidget *table, QVBoxLayout *layout, int dialog_w, int dialog_h, QLabel *note,
                         int button_row_h, const QString &progress_header);
 
-void center_dialog_on(QDialog *dialog, QWidget *host, const QSize &size) {
-    if (dialog == nullptr || host == nullptr) {
-        return;
-    }
-    const QRect frame = host->frameGeometry();
-    const int x = frame.x() + std::max(0, (frame.width() - size.width()) / 2);
-    const int y = frame.y() + std::max(0, (frame.height() - size.height()) / 2);
-    dialog->move(x, y);
-}
-
 QSize modal_dialog_size(QDialog *dialog, const QSize &fixed_size) {
     if (dialog == nullptr) {
         return fixed_size;
@@ -256,10 +268,8 @@ QSize modal_dialog_size(QDialog *dialog, const QSize &fixed_size) {
     if (layout == nullptr) {
         return fixed_size;
     }
-    layout->setSizeConstraint(QLayout::SetFixedSize);
-    layout->setAlignment(Qt::AlignTop);
     layout->activate();
-    const QSize content = layout->minimumSize();
+    const QSize content = layout->sizeHint().expandedTo(layout->minimumSize());
     const int width = fixed_size.isValid() && fixed_size.width() > 0
                           ? fixed_size.width()
                           : std::max(dialog->minimumWidth(), content.width());
@@ -270,40 +280,26 @@ QSize modal_dialog_size(QDialog *dialog, const QSize &fixed_size) {
 
 void exec_app_modal_dialog(QDialog *dialog, QWidget *host, int wrapped_inner_w, const QSize &fixed_size,
                             const std::function<void()> &finalize = {}) {
+    Q_UNUSED(host);
     if (dialog == nullptr) {
         return;
     }
 
-    dialog->setAttribute(Qt::WA_DontShowOnScreen, true);
-    dialog->show();
-    QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
-
-    measure_and_lock_dialog(dialog, wrapped_inner_w);
+    const bool size_already_locked =
+        fixed_size.isValid() && fixed_size.width() > 0 && fixed_size.height() > 0;
+    if (!size_already_locked) {
+        measure_and_lock_dialog(dialog, wrapped_inner_w);
+    }
     if (finalize) {
         finalize();
     }
-
-    QSize size = modal_dialog_size(dialog, fixed_size);
-    if (size.width() <= 0 || size.height() <= 0) {
-        size = dialog->sizeHint().expandedTo(QSize(240, 120));
-    }
-
-#ifdef Q_OS_MAC
-    if (!(fixed_size.isValid() && fixed_size.height() > 0)) {
-        dialog->resize(size);
-        QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
-        const QSize frame = dialog->frameGeometry().size();
-        if (frame.width() > 0 && frame.height() > 0) {
-            size = frame;
+    if (!size_already_locked) {
+        QSize size = modal_dialog_size(dialog, fixed_size);
+        if (size.width() <= 0 || size.height() <= 0) {
+            size = dialog->sizeHint().expandedTo(QSize(240, 120));
         }
+        dialog->setFixedSize(size);
     }
-#endif
-
-    dialog->setFixedSize(size);
-    center_dialog_on(dialog, host, size);
-
-    dialog->hide();
-    dialog->setAttribute(Qt::WA_DontShowOnScreen, false);
     dialog->exec();
 }
 
@@ -2002,9 +1998,10 @@ int i2p_settings_exec(void *parent, const i2p_settings_in *in) {
         return 0;
     }
     QWidget *host = as_widget(parent);
-    QDialog dialog(host);
-    apply_real_dialog_window(&dialog);
+    QDialog dialog(nullptr, hosted_dialog_flags());
+    prepare_hosted_dialog(&dialog);
     dialog.setWindowTitle(qstr(in->title));
+    dialog.setFixedSize(DialogMetrics::kSettingsW, DialogMetrics::kSettingsH);
     if (in->stylesheet && in->stylesheet[0] != '\0') {
         dialog.setStyleSheet(qstr(in->stylesheet));
     }
@@ -2111,8 +2108,8 @@ void i2p_about_exec(void *parent, const i2p_about_in *in) {
         return;
     }
     QWidget *host = as_widget(parent);
-    QDialog dialog(host);
-    apply_real_dialog_window(&dialog);
+    QDialog dialog(nullptr, hosted_dialog_flags());
+    prepare_hosted_dialog(&dialog);
     dialog.setWindowTitle(qstr(in->title));
     dialog.setMinimumWidth(DialogMetrics::kAboutW);
     if (in->stylesheet && in->stylesheet[0] != '\0') {
@@ -2192,9 +2189,10 @@ void i2p_files_exec(void *parent, const i2p_files_in *in, i2p_file_change_cb cb,
         return;
     }
     QWidget *host = as_widget(parent);
-    QDialog dialog(host);
-    apply_real_dialog_window(&dialog);
+    QDialog dialog(nullptr, hosted_dialog_flags());
+    prepare_hosted_dialog(&dialog);
     dialog.setWindowTitle(qstr(in->title));
+    dialog.setFixedSize(DialogMetrics::kFilesW, DialogMetrics::kFilesH);
     if (in->stylesheet && in->stylesheet[0] != '\0') {
         dialog.setStyleSheet(qstr(in->stylesheet));
     }
@@ -2336,10 +2334,10 @@ void i2p_files_exec(void *parent, const i2p_files_in *in, i2p_file_change_cb cb,
     add_dialog_buttons(layout, {close});
 
     exec_app_modal_dialog(
-        &dialog, host, inner_w, QSize(DialogMetrics::kFilesW, 0),
+        &dialog, host, inner_w, QSize(DialogMetrics::kFilesW, DialogMetrics::kFilesH),
         [&] {
             if (files_table != nullptr) {
-                layout_files_table(files_table, layout, DialogMetrics::kFilesW, 0, note,
+                layout_files_table(files_table, layout, DialogMetrics::kFilesW, DialogMetrics::kFilesH, note,
                                    dialog_buttons_row_height(close), qstr(in->col_progress));
             }
         });
