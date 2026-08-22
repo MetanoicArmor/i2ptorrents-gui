@@ -36,12 +36,12 @@ QPushButton#AboutButton, QPushButton#SettingsButton {
 }
 QPushButton#AboutButton:hover, QPushButton#SettingsButton:hover { background: rgba(255, 255, 255, 0.08); }
 QLineEdit, QSpinBox, QComboBox {
-    background: #2c2c2e; border: none; border-radius: 8px; padding: 8px 12px;
+    background: #3a3a3c; border: none; border-radius: 8px; padding: 8px 12px;
 }
-QComboBox:hover { background: #242831; }
+QComboBox:hover { background: #48484a; }
 QLineEdit:focus, QSpinBox:focus, QComboBox:focus { border: none; }
 QFrame#SpinRow {
-    background: #2c2c2e; border: 1px solid transparent; border-radius: 8px;
+    background: #3a3a3c; border: 1px solid transparent; border-radius: 8px;
 }
 QFrame#SpinRow[focused="true"] { border: 1px solid #0a84ff; }
 QFrame#SpinRow QSpinBox {

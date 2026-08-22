@@ -32,7 +32,7 @@ void i2p_macos_nsview_round_corners(void *nsview, int left_side) {
     i2p_round_view(view, kI2pWindowRadius, corners);
 }
 
-void i2p_macos_nsview_apply_vibrancy(void *nsview, int night) {
+void i2p_macos_nsview_apply_vibrancy(void *nsview, int night, int dialog) {
     if (nsview == nullptr) {
         return;
     }
@@ -47,9 +47,15 @@ void i2p_macos_nsview_apply_vibrancy(void *nsview, int night) {
     window.appearance = appearance;
     window.opaque = NO;
     window.backgroundColor = NSColor.clearColor;
-    window.styleMask |= NSWindowStyleMaskFullSizeContentView;
-    window.titlebarAppearsTransparent = YES;
-    window.titleVisibility = NSWindowTitleHidden;
+    if (dialog) {
+        window.styleMask &= ~NSWindowStyleMaskFullSizeContentView;
+        window.titlebarAppearsTransparent = YES;
+        window.titleVisibility = NSWindowTitleVisible;
+    } else {
+        window.styleMask |= NSWindowStyleMaskFullSizeContentView;
+        window.titlebarAppearsTransparent = YES;
+        window.titleVisibility = NSWindowTitleHidden;
+    }
     if (@available(macOS 11.0, *)) {
         window.titlebarSeparatorStyle = NSTitlebarSeparatorStyleNone;
     }
@@ -84,7 +90,8 @@ void i2p_macos_nsview_apply_vibrancy(void *nsview, int night) {
 
     effect.appearance = appearance;
     if (@available(macOS 10.14, *)) {
-        effect.material = NSVisualEffectMaterialSidebar;
+        effect.material = dialog ? NSVisualEffectMaterialWindowBackground
+                                 : NSVisualEffectMaterialSidebar;
     } else {
         effect.material = NSVisualEffectMaterialAppearanceBased;
     }

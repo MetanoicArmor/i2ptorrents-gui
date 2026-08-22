@@ -123,8 +123,10 @@ void apply_window_material(QWidget *widget, bool night) {
     widget->setAutoFillBackground(false);
     (void)widget->winId();
 #ifdef __APPLE__
-    widget->setAttribute(Qt::WA_ContentsMarginsRespectsSafeArea, false);
-    i2p_macos_nsview_apply_vibrancy(reinterpret_cast<void *>(widget->winId()), night ? 1 : 0);
+    const bool dialog = qobject_cast<QDialog *>(widget) != nullptr;
+    widget->setAttribute(Qt::WA_ContentsMarginsRespectsSafeArea, dialog);
+    i2p_macos_nsview_apply_vibrancy(reinterpret_cast<void *>(widget->winId()), night ? 1 : 0,
+                                    dialog ? 1 : 0);
 #endif
     bool has_panes = false;
     for (QWidget *child : widget->findChildren<QWidget *>()) {
