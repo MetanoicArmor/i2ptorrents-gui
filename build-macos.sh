@@ -7,35 +7,172 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 [ "$(uname -s)" = "Darwin" ] || die "build-macos.sh must run on macOS"
 
+# MACOS_ARCHS: auto (default) | arm64 | x64 | all
+MACOS_ARCHS="${MACOS_ARCHS:-auto}"
+
 export PATH="/opt/homebrew/opt/qt@6/bin:/opt/homebrew/bin:/usr/local/opt/qt@6/bin:/usr/local/bin:${PATH}"
 setup_qt_path
 read_version
-detect_arch
-
-echo "==> Building ${APP_NAME} ${RELEASE_VERSION} for macOS ${ARCH_SUFFIX}"
 make_icons
 [ -f "${ROOT}/I2PTorrents.icns" ] || die "I2PTorrents.icns was not created (need sips + iconutil)"
 
-echo "==> Building release binary"
-"${ROOT}/scripts/cargo-qt.sh" build --release --features gui
-BIN="${ROOT}/target/release/${CARGO_BIN}"
-[ -x "${BIN}" ] || die "missing binary ${BIN}"
-if command -v strip >/dev/null 2>&1; then
-  strip -x "${BIN}" || true
-fi
+qt_core_binary() {
+  local prefix="$1"
+  local core="${prefix}/lib/QtCore.framework/QtCore"
+  [ -f "${core}" ] || return 1
+  printf '%s' "${core}"
+}
 
-APP_DIR="${ROOT}/dist/${APP_NAME}.app"
-MACOS_DIR="${APP_DIR}/Contents/MacOS"
-RES_DIR="${APP_DIR}/Contents/Resources"
-echo "==> Wrapping ${APP_DIR}"
-rm -rf "${APP_DIR}"
-mkdir -p "${MACOS_DIR}" "${RES_DIR}"
-cp "${BIN}" "${MACOS_DIR}/${APP_NAME}"
-chmod +x "${MACOS_DIR}/${APP_NAME}"
-cp "${ROOT}/I2PTorrents.icns" "${RES_DIR}/I2PTorrents.icns"
-copy_runtime_files "${RES_DIR}"
+qt_cpu_arch() {
+  local core
+  core="$(qt_core_binary "$1")" || return 1
+  case "$(file -b "${core}")" in
+    *arm64*) printf 'arm64' ;;
+    *x86_64*) printf 'x86_64' ;;
+    *) return 1 ;;
+  esac
+}
 
-cat > "${APP_DIR}/Contents/Info.plist" <<PLIST
+find_qt_prefix_for_cpu() {
+  local want_cpu="$1"
+  local candidate core cpu
+  for candidate in /opt/homebrew /usr/local; do
+    core="$(qt_core_binary "${candidate}")" || continue
+    cpu="$(qt_cpu_arch "${candidate}")" || continue
+    if [ "${cpu}" = "${want_cpu}" ]; then
+      printf '%s' "${candidate}"
+      return 0
+    fi
+  done
+  return 1
+}
+
+ensure_rust_target() {
+  local target="$1"
+  if ! rustup target list --installed | grep -qx "${target}"; then
+    echo "==> Installing Rust target ${target}"
+    rustup target add "${target}"
+  fi
+}
+
+resolve_macos_builds() {
+  HOST_CPU="$(uname -m)"
+  case "${HOST_CPU}" in
+    arm64|aarch64) HOST_CPU=arm64 ;;
+    x86_64) HOST_CPU=x86_64 ;;
+    *) die "unsupported macOS host CPU: ${HOST_CPU}" ;;
+  esac
+
+  BUILD_SPECS=()
+  add_build() {
+    local suffix="$1"
+    local cpu="$2"
+    local target="$3"
+    local qt_prefix="$4"
+    BUILD_SPECS+=("${suffix}|${cpu}|${target}|${qt_prefix}")
+  }
+
+  want_arm64=0
+  want_x64=0
+  case "${MACOS_ARCHS}" in
+    auto)
+      [ "${HOST_CPU}" = "arm64" ] && want_arm64=1
+      [ "${HOST_CPU}" = "x86_64" ] && want_x64=1
+      if [ "${HOST_CPU}" = "arm64" ]; then
+        want_x64=1
+      elif [ "${HOST_CPU}" = "x86_64" ]; then
+        want_arm64=1
+      fi
+      ;;
+    all)
+      want_arm64=1
+      want_x64=1
+      ;;
+    arm64|aarch64)
+      want_arm64=1
+      ;;
+    x64|x86_64|intel)
+      want_x64=1
+      ;;
+    *)
+      die "unknown MACOS_ARCHS=${MACOS_ARCHS} (use auto, all, arm64, or x64)"
+      ;;
+  esac
+
+  if [ "${want_arm64}" -eq 1 ]; then
+    if qt_prefix="$(find_qt_prefix_for_cpu arm64)"; then
+      if [ "${HOST_CPU}" = "arm64" ]; then
+        add_build arm64 arm64 "" "${qt_prefix}"
+      else
+        ensure_rust_target aarch64-apple-darwin
+        add_build arm64 arm64 aarch64-apple-darwin "${qt_prefix}"
+      fi
+    elif [ "${MACOS_ARCHS}" = "arm64" ] || [ "${MACOS_ARCHS}" = "all" ]; then
+      die "Qt for arm64 not found (brew install qt@6 under /opt/homebrew)"
+    else
+      echo "==> Skipping arm64 build: Qt for arm64 not found"
+    fi
+  fi
+
+  if [ "${want_x64}" -eq 1 ]; then
+    if qt_prefix="$(find_qt_prefix_for_cpu x86_64)"; then
+      if [ "${HOST_CPU}" = "x86_64" ]; then
+        add_build x64 x86_64 "" "${qt_prefix}"
+      else
+        ensure_rust_target x86_64-apple-darwin
+        add_build x64 x86_64 x86_64-apple-darwin "${qt_prefix}"
+      fi
+    elif [ "${MACOS_ARCHS}" = "x64" ] || [ "${MACOS_ARCHS}" = "all" ] || [ "${MACOS_ARCHS}" = "intel" ]; then
+      die "Qt for x86_64 not found. On Apple Silicon install Intel Homebrew Qt, e.g. arch -x86_64 /usr/local/bin/brew install qt@6"
+    else
+      echo "==> Skipping x64 build: Qt for x86_64 not found (/usr/local via Rosetta Homebrew)"
+    fi
+  fi
+
+  [ "${#BUILD_SPECS[@]}" -gt 0 ] || die "no macOS builds selected (check MACOS_ARCHS and Qt installs)"
+}
+
+build_macos_release() {
+  local arch_suffix="$1"
+  local macos_arch="$2"
+  local rust_target="$3"
+  local qt_prefix="$4"
+
+  echo
+  echo "==> Building ${APP_NAME} ${RELEASE_VERSION} for macOS ${arch_suffix} (Qt: ${qt_prefix})"
+
+  export I2P_QT_PREFIX="${qt_prefix}"
+  export I2P_MACOS_ARCH="${macos_arch}"
+
+  local cargo_args=(build --release --features gui)
+  if [ -n "${rust_target}" ]; then
+    cargo_args+=(--target "${rust_target}")
+  fi
+  "${ROOT}/scripts/cargo-qt.sh" "${cargo_args[@]}"
+
+  local bin
+  if [ -n "${rust_target}" ]; then
+    bin="${ROOT}/target/${rust_target}/release/${CARGO_BIN}"
+  else
+    bin="${ROOT}/target/release/${CARGO_BIN}"
+  fi
+  [ -x "${bin}" ] || die "missing binary ${bin}"
+  if command -v strip >/dev/null 2>&1; then
+    strip -x "${bin}" || true
+  fi
+
+  local app_dir="${ROOT}/dist/${APP_NAME}-${arch_suffix}.app"
+  local macos_dir="${app_dir}/Contents/MacOS"
+  local res_dir="${app_dir}/Contents/Resources"
+  echo "==> Wrapping ${app_dir}"
+  rm -rf "${app_dir}"
+  mkdir -p "${macos_dir}" "${res_dir}"
+  cp "${bin}" "${macos_dir}/${APP_NAME}"
+  chmod +x "${macos_dir}/${APP_NAME}"
+  cp "${ROOT}/I2PTorrents.icns" "${res_dir}/I2PTorrents.icns"
+  copy_runtime_files "${res_dir}"
+
+  cat > "${app_dir}/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -71,48 +208,71 @@ cat > "${APP_DIR}/Contents/Info.plist" <<PLIST
 </dict>
 </plist>
 PLIST
-touch "${APP_DIR}" "${APP_DIR}/Contents/Info.plist"
+  touch "${app_dir}" "${app_dir}/Contents/Info.plist"
 
-MACDEPLOYQT="$(command -v macdeployqt || true)"
-if [ -z "${MACDEPLOYQT}" ]; then
-  for candidate in /opt/homebrew/opt/qt@6/bin/macdeployqt /usr/local/opt/qt@6/bin/macdeployqt; do
+  local macdeployqt=""
+  for candidate in \
+    "${qt_prefix}/bin/macdeployqt" \
+    "${qt_prefix}/opt/qt@6/bin/macdeployqt" \
+    "$(command -v macdeployqt || true)"; do
+    [ -n "${candidate}" ] || continue
     if [ -x "${candidate}" ]; then
-      MACDEPLOYQT="${candidate}"
+      macdeployqt="${candidate}"
       break
     fi
   done
-fi
-[ -n "${MACDEPLOYQT}" ] || die "macdeployqt not found (brew install qt@6)"
+  [ -n "${macdeployqt}" ] || die "macdeployqt not found for ${qt_prefix} (brew install qt@6)"
 
-echo "==> Bundling Qt with macdeployqt"
-QT_LIBS=""
-if command -v qmake6 >/dev/null 2>&1; then
-  QT_LIBS="$(qmake6 -query QT_INSTALL_LIBS 2>/dev/null || true)"
-elif command -v qmake >/dev/null 2>&1; then
-  QT_LIBS="$(qmake -query QT_INSTALL_LIBS 2>/dev/null || true)"
-fi
-DEPLOY_ARGS=("${APP_DIR}" -always-overwrite)
-if [ -n "${QT_LIBS}" ] && [ -d "${QT_LIBS}" ]; then
-  export DYLD_FRAMEWORK_PATH="${QT_LIBS}${DYLD_FRAMEWORK_PATH:+:${DYLD_FRAMEWORK_PATH}}"
-  DEPLOY_ARGS+=(-libpath="${QT_LIBS}")
-  # Homebrew macdeployqt resolves plugin @rpath against <appdir>/../lib
-  ln -sfn "${QT_LIBS}" "${ROOT}/dist/lib"
-fi
-"${MACDEPLOYQT}" "${DEPLOY_ARGS[@]}"
-rm -f "${ROOT}/dist/lib"
+  echo "==> Bundling Qt with macdeployqt"
+  local qt_libs=""
+  if [ -x "${qt_prefix}/bin/qmake6" ]; then
+    qt_libs="$("${qt_prefix}/bin/qmake6" -query QT_INSTALL_LIBS 2>/dev/null || true)"
+  elif [ -x "${qt_prefix}/bin/qmake" ]; then
+    qt_libs="$("${qt_prefix}/bin/qmake" -query QT_INSTALL_LIBS 2>/dev/null || true)"
+  fi
+  local deploy_args=("${app_dir}" -always-overwrite)
+  if [ -n "${qt_libs}" ] && [ -d "${qt_libs}" ]; then
+    export DYLD_FRAMEWORK_PATH="${qt_libs}${DYLD_FRAMEWORK_PATH:+:${DYLD_FRAMEWORK_PATH}}"
+    deploy_args+=(-libpath="${qt_libs}")
+    ln -sfn "${qt_libs}" "${ROOT}/dist/lib"
+  fi
+  "${macdeployqt}" "${deploy_args[@]}"
+  rm -f "${ROOT}/dist/lib"
 
-if command -v xattr >/dev/null 2>&1; then
-  xattr -cr "${APP_DIR}"
-fi
-if command -v codesign >/dev/null 2>&1; then
-  echo "==> Ad-hoc codesign"
-  codesign --force --deep --sign - "${APP_DIR}"
-fi
+  if command -v xattr >/dev/null 2>&1; then
+    xattr -cr "${app_dir}"
+  fi
+  if command -v codesign >/dev/null 2>&1; then
+    echo "==> Ad-hoc codesign"
+    codesign --force --deep --sign - "${app_dir}"
+  fi
 
-ZIP_FILE="${ROOT}/${APP_NAME}-macOS-${ARCH_SUFFIX}-v${RELEASE_VERSION}.zip"
-rm -f "${ZIP_FILE}"
-ditto -c -k --sequesterRsrc --keepParent "${APP_DIR}" "${ZIP_FILE}"
+  local zip_file="${ROOT}/${APP_NAME}-macOS-${arch_suffix}-v${RELEASE_VERSION}.zip"
+  rm -f "${zip_file}"
+  ditto -c -k --sequesterRsrc --keepParent "${app_dir}" "${zip_file}"
+
+  echo "✔ GUI: ${app_dir}"
+  echo "✔ Packed ${zip_file}"
+}
+
+resolve_macos_builds
+
+PRIMARY_APP=""
+PRIMARY_ZIP=""
+for spec in "${BUILD_SPECS[@]}"; do
+  IFS='|' read -r arch_suffix macos_arch rust_target qt_prefix <<< "${spec}"
+  build_macos_release "${arch_suffix}" "${macos_arch}" "${rust_target}" "${qt_prefix}"
+  PRIMARY_APP="${ROOT}/dist/${APP_NAME}-${arch_suffix}.app"
+  PRIMARY_ZIP="${ROOT}/${APP_NAME}-macOS-${arch_suffix}-v${RELEASE_VERSION}.zip"
+done
+
+if [ "${#BUILD_SPECS[@]}" -eq 1 ]; then
+  ln -sfn "$(basename "${PRIMARY_APP}")" "${ROOT}/dist/${APP_NAME}.app"
+else
+  rm -f "${ROOT}/dist/${APP_NAME}.app"
+  echo
+  echo "Built ${#BUILD_SPECS[@]} macOS packages."
+fi
 
 echo
-echo "✔ GUI: ${APP_DIR}"
-echo "✔ Packed ${ZIP_FILE}"
+echo "Done."

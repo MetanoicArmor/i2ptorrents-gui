@@ -109,6 +109,13 @@ fn macos_qt_stubs() {
 
 #[cfg(target_os = "macos")]
 fn macos_qt_prefix() -> Option<PathBuf> {
+    if let Ok(prefix) = std::env::var("I2P_QT_PREFIX") {
+        let root = PathBuf::from(&prefix);
+        let lib = root.join("lib/QtCore.framework/QtCore");
+        if lib.exists() {
+            return Some(root);
+        }
+    }
     for candidate in ["/opt/homebrew", "/usr/local"] {
         let lib = PathBuf::from(candidate).join("lib/QtCore.framework/QtCore");
         if lib.exists() {
