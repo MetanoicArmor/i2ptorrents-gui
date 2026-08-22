@@ -15,6 +15,10 @@
   <img src="screenshots/screenshot-windows.png" alt="I2P Torrents on Windows" width="440" />
   <br>
   <em>macOS</em> &nbsp;·&nbsp; <em>Windows</em>
+  <br><br>
+  <img src="screenshots/screenshot-linux.png" alt="I2P Torrents on Linux" width="440" />
+  <br>
+  <em>Linux</em>
 </p>
 
 ---
