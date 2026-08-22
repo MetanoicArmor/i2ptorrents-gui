@@ -1,6 +1,6 @@
 
 QMainWindow, QWidget#MainWindow { background: #1c1c1e; }
-QDialog { background: #1c1c1e; }
+QDialog { background: transparent; }
 QWidget { color: #f5f5f7; font-size: 13px; }
 QFrame#Sidebar, QWidget#Sidebar {
     background: transparent; border: none;
@@ -14,7 +14,7 @@ QFrame#TorrentCard, QFrame#SummaryCard, QWidget#TorrentCard, QWidget#SummaryCard
 }
 QLabel#AppTitle { font-size: 20px; font-weight: 650; }
 QLabel#AppSubtitle { color: #9aa3b5; font-size: 13px; padding: 0px; }
-QLabel#Title { font-size: 22px; font-weight: 650; }
+QLabel#Title { color: #f5f5f7; font-size: 22px; font-weight: 650; }
 QLabel#SectionTitle { color: #9aa3b5; font-size: 12px; font-weight: 600; }
 QLabel#TorrentName { color: #f5f5f7; font-size: 14px; font-weight: 650; padding: 0px; }
 QLabel#Secondary, QLabel#StatusText { color: #9aa3b5; font-size: 12px; padding: 0px; }
@@ -36,19 +36,20 @@ QPushButton#AboutButton, QPushButton#SettingsButton {
 }
 QPushButton#AboutButton:hover, QPushButton#SettingsButton:hover { background: rgba(255, 255, 255, 0.08); }
 QLineEdit, QSpinBox, QComboBox {
-    background: #3a3a3c; border: none; border-radius: 8px; padding: 8px 12px;
+    background: #3a3a3c; border: none; border-radius: 8px;
+    padding: 6px 12px; min-height: 22px;
 }
 QComboBox:hover { background: #48484a; }
 QLineEdit:focus, QSpinBox:focus, QComboBox:focus { border: none; }
-QFrame#SpinRow {
+QFrame#SpinRow, QFrame#PathRow {
     background: #3a3a3c; border: 1px solid transparent; border-radius: 8px;
 }
 QFrame#SpinRow[focused="true"] { border: 1px solid #0a84ff; }
-QFrame#SpinRow QSpinBox {
-    background: transparent; border: none; padding: 8px 10px; min-height: 22px;
+QFrame#SpinRow QSpinBox, QFrame#PathRow QLineEdit {
+    background: transparent; border: none; padding: 0px 12px; min-height: 0px;
     selection-background-color: #0a84ff; selection-color: #ffffff;
 }
-QFrame#SpinRow QSpinBox:focus { border: none; }
+QFrame#SpinRow QSpinBox:focus, QFrame#PathRow QLineEdit:focus { border: none; }
 QWidget#SpinStepColumn {
     background: transparent; border: none;
     border-top-right-radius: 7px; border-bottom-right-radius: 7px;
@@ -70,21 +71,28 @@ QComboBox::drop-down {
     width: 28px; border: none; background: transparent;
 }
 QComboBox::down-arrow { image: none; width: 0; height: 0; }
+QComboBox QAbstractItemView {
+    background: #2c2c2e; color: #f5f5f7; border: none; outline: 0;
+    selection-background-color: #3a3a3c; selection-color: #f5f5f7;
+}
+QComboBoxPrivateContainer {
+    background: #2c2c2e; border: 1px solid #48484a; border-radius: 10px; padding: 4px;
+}
 QProgressBar { background: #3b3e48; border: none; border-radius: 3px; min-height: 7px; max-height: 7px; text-align: center; }
 QProgressBar::chunk { background: #0a84ff; border-radius: 3px; }
 QToolButton#MoreButton {
     padding: 2px 8px; min-width: 24px; max-height: 22px; font-size: 11px; border-radius: 6px;
 }
 QMenu {
-    background: rgba(34, 37, 45, 0.96); color: #e3e8f1; border: none;
+    background: rgba(44, 44, 46, 0.74); color: #f5f5f7; border: 1px solid rgba(72, 72, 74, 0.52);
     padding: 8px; border-radius: 14px;
 }
 QMenu::item {
-    background: transparent; color: #e3e8f1; padding: 9px 14px; border-radius: 9px;
+    background: transparent; color: #f5f5f7; padding: 9px 14px; border-radius: 9px;
 }
-QMenu::item:selected { background: rgba(255, 255, 255, 0.10); }
-QMenu::item:disabled { color: #8b93a5; }
-QMenu::separator { height: 1px; background: #343a46; margin: 6px 8px; }
+QMenu::item:selected { background: #3a3a3c; }
+QMenu::item:disabled { color: #8e8e93; }
+QMenu::separator { height: 1px; background: #48484a; margin: 6px 8px; }
 QScrollArea { border: none; background: transparent; }
 QScrollArea > QWidget > QWidget { background: transparent; }
 QScrollBar:vertical {
@@ -96,7 +104,10 @@ QScrollBar::handle:vertical {
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
 QCheckBox { spacing: 8px; }
-QWidget#FilesTablePane { background: transparent; border: none; }
+QWidget#FilesTablePane {
+    background: #1c1c1e; border: none; border-radius: 0px;
+}
+QWidget#FilesTableOverlay { background: transparent; border: none; }
 QTableWidget#FilesTable {
     background: #2c2c2e; border: none; border-radius: 0px;
     gridline-color: transparent; outline: 0;
