@@ -10,15 +10,11 @@
 </p>
 
 <p align="center">
-  <img src="screenshots/screenshot-macos.png" alt="I2P Torrents on macOS" width="900" />
+  <img src="screenshots/screenshot-macos.png" alt="I2P Torrents on macOS" width="440" />
+  &nbsp;
+  <img src="screenshots/screenshot-windows.png" alt="I2P Torrents on Windows" width="440" />
   <br>
-  <em>macOS</em>
-</p>
-
-<p align="center">
-  <img src="screenshots/screenshot-windows.png" alt="I2P Torrents on Windows" width="900" />
-  <br>
-  <em>Windows</em>
+  <em>macOS</em> &nbsp;·&nbsp; <em>Windows</em>
 </p>
 
 ---
