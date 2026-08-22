@@ -3935,8 +3935,8 @@ void i2p_apply_tooltip_palette(const char *theme) {
         return;
     }
     const bool night = qstr(theme) == QLatin1String("night");
-    const QColor bg(night ? "#22252d" : "#f2f4f8");
-    const QColor fg(night ? "#e3e8f1" : "#1d1d1f");
+    const QColor bg(night ? "#2c2c2e" : "#f2f2f7");
+    const QColor fg(night ? "#f5f5f7" : "#1d1d1f");
     QPalette pal = app->palette();
     for (auto group : {QPalette::Active, QPalette::Inactive, QPalette::Disabled}) {
         pal.setColor(group, QPalette::ToolTipBase, bg);

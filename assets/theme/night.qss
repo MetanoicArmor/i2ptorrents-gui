@@ -154,7 +154,7 @@ QTableWidget#FilesTable QHeaderView::section:last {
 }
 
 QToolTip {
-    background: #22252d; color: #e3e8f1; border: none;
+    background: #2c2c2e; color: #f5f5f7; border: none;
     padding: 6px 10px; border-radius: 8px;
 }
 QLabel#AboutLink { color: #9aa3b5; font-size: 12px; padding: 0px; }
