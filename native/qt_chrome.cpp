@@ -2407,6 +2407,36 @@ thread_local std::string g_settings_view;
 thread_local int g_settings_refresh = 2;
 thread_local std::string g_open_file;
 
+class ComboPopupContainerChrome final : public QObject {
+public:
+    ComboPopupContainerChrome(QWidget *container, const QColor &bg, const QColor &border, qreal radius)
+        : QObject(container), container_(container), bg_(bg), border_(border), radius_(radius) {
+        container_->installEventFilter(this);
+    }
+
+    void updateColors(const QColor &bg, const QColor &border) {
+        bg_ = bg;
+        border_ = border;
+        if (container_ != nullptr) {
+            container_->update();
+        }
+    }
+
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override {
+        if (watched == container_ && event->type() == QEvent::Paint) {
+            paint_popup_rounded_bg(container_, bg_, border_, radius_);
+        }
+        return QObject::eventFilter(watched, event);
+    }
+
+private:
+    QWidget *container_ = nullptr;
+    QColor bg_;
+    QColor border_;
+    qreal radius_ = 10.0;
+};
+
 void style_combo_popup(QComboBox *combo) {
     if (combo == nullptr) {
         return;
@@ -2426,28 +2456,43 @@ void style_combo_popup(QComboBox *combo) {
     const QColor border = night ? QColor(0x48, 0x48, 0x4a) : QColor(0xd0, 0xd0, 0xd5);
     QPalette pal = view->palette();
     for (auto group : {QPalette::Active, QPalette::Inactive}) {
-        pal.setColor(group, QPalette::Base, bg);
-        pal.setColor(group, QPalette::Window, bg);
+        pal.setColor(group, QPalette::Base, Qt::transparent);
+        pal.setColor(group, QPalette::Window, Qt::transparent);
         pal.setColor(group, QPalette::Text, fg);
         pal.setColor(group, QPalette::WindowText, fg);
         pal.setColor(group, QPalette::ButtonText, fg);
         pal.setColor(group, QPalette::Highlight, sel);
         pal.setColor(group, QPalette::HighlightedText, fg);
     }
-    view->setAutoFillBackground(true);
+    view->setAttribute(Qt::WA_TranslucentBackground, true);
+    view->setAutoFillBackground(false);
+    view->viewport()->setAttribute(Qt::WA_TranslucentBackground, true);
+    view->viewport()->setAutoFillBackground(false);
     view->setPalette(pal);
+    view->viewport()->setPalette(pal);
     view->setObjectName(QStringLiteral("ComboPopupView"));
+    view->setFrameShape(QFrame::NoFrame);
     if (QWidget *container = view->parentWidget()) {
-        container->setAutoFillBackground(true);
-        container->setPalette(pal);
+        container->clearMask();
+        container->setAttribute(Qt::WA_TranslucentBackground, true);
+        container->setAutoFillBackground(false);
         container->setObjectName(QStringLiteral("ComboPopupContainer"));
         container->setStyleSheet(
-            QStringLiteral("QWidget#ComboPopupContainer { background: %1; border: 1px solid %2; border-radius: 10px; }"
-                           "QAbstractItemView { background: %1; color: %3; border: none; outline: 0; "
-                           "selection-background-color: %4; selection-color: %3; }")
-                .arg(bg.name(), border.name(), fg.name(), sel.name()));
-        container->setAttribute(Qt::WA_TranslucentBackground, false);
-        update_popup_rounded_mask(container, 10.0);
+            QStringLiteral("QWidget#ComboPopupContainer { background: transparent; border: none; }"
+                           "QAbstractItemView#ComboPopupView { background: transparent; color: %1; border: none; "
+                           "outline: 0; selection-background-color: %2; selection-color: %1; }")
+                .arg(fg.name(), sel.name()));
+        ComboPopupContainerChrome *chrome = nullptr;
+        for (QObject *child : container->children()) {
+            if ((chrome = dynamic_cast<ComboPopupContainerChrome *>(child)) != nullptr) {
+                break;
+            }
+        }
+        if (chrome == nullptr) {
+            chrome = new ComboPopupContainerChrome(container, bg, border, 10.0);
+        } else {
+            chrome->updateColors(bg, border);
+        }
 #ifdef Q_OS_MAC
         if (container != combo && (container->isWindow() || (container->windowFlags() & Qt::Popup))) {
             clip_native_rounded(container, night ? 0x48484au : 0xd0d0d5u, 0, 0);
