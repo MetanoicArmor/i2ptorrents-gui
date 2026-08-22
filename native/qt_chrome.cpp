@@ -2979,6 +2979,10 @@ public:
     RoundedTooltipWindow() : QWidget(nullptr, tooltipFlags()) {
         setAttribute(Qt::WA_TranslucentBackground, true);
         setAttribute(Qt::WA_ShowWithoutActivating, true);
+#if defined(Q_OS_LINUX) || (defined(Q_OS_UNIX) && !defined(Q_OS_MAC) && !defined(Q_OS_WIN))
+        // Tiling WMs tile Qt::Tool as a normal window; ToolTip stays transient.
+        setAttribute(Qt::WA_X11DoNotAcceptFocus, true);
+#endif
         setAutoFillBackground(false);
         setFocusPolicy(Qt::NoFocus);
         setMouseTracking(true);
@@ -3147,10 +3151,14 @@ protected:
 
 private:
     static Qt::WindowFlags tooltipFlags() {
+#if defined(Q_OS_MAC) || defined(Q_OS_WIN)
         Qt::WindowFlags flags =
             Qt::Tool | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint;
-#if defined(Q_OS_MAC) || defined(Q_OS_WIN)
         flags |= Qt::NoDropShadowWindowHint;
+#else
+        // Qt::Tool is treated as a tileable window on X11/Wayland tiling compositors.
+        Qt::WindowFlags flags =
+            Qt::ToolTip | Qt::FramelessWindowHint | Qt::WindowStaysOnTopHint;
 #endif
         return flags;
     }
