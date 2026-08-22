@@ -1,10 +1,13 @@
 target/
+target2/
 .cargo/config.toml.local
 .venv/
 .DS_Store
 .omc/
 build/
 dist/
+aqtinstall.log
+build_log.txt
 icon.png
 I2PTorrents.ico
 I2PTorrents.icns
