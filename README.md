@@ -10,7 +10,15 @@
 </p>
 
 <p align="center">
-  <img src="screenshots/screenshot.png" alt="I2P Torrents GUI" width="900" />
+  <img src="screenshots/screenshot-macos.png" alt="I2P Torrents on macOS" width="900" />
+  <br>
+  <em>macOS</em>
+</p>
+
+<p align="center">
+  <img src="screenshots/screenshot-windows.png" alt="I2P Torrents on Windows" width="900" />
+  <br>
+  <em>Windows</em>
 </p>
 
 ---
@@ -117,6 +125,9 @@ The GUI is a **Rust + Qt Widgets** desktop app (same QSS themes). It talks to i2
 cargo test --no-default-features
 # macOS Homebrew needs C++17 and framework headers:
 ./scripts/cargo-qt.sh run --features gui
+# Windows (PowerShell) — run once, then cargo in this or a new terminal:
+#   .\scripts\setup-windows-dev.ps1
+#   cargo run --release --features gui
 # same as:
 #   export CXXFLAGS="-std=c++17 -include arm_acle.h $(pkg-config --cflags Qt6Widgets Qt6Gui Qt6Core Qt6UiTools)"
 #   cargo run --features gui
@@ -151,11 +162,20 @@ Result: `dist/I2PTorrents/` (launcher + bundled Qt libs), `I2PTorrents-linux-<ar
 
 **Windows** (PowerShell)
 
+Run from source (once per machine, then in the same or a new terminal):
+
+```powershell
+.\scripts\setup-windows-dev.ps1
+cargo run --release --features gui
+```
+
+Release package:
+
 ```powershell
 .\build-windows.ps1
 ```
 
-Result: `dist\I2PTorrents\I2PTorrents.exe` and `I2PTorrents-windows-<arch>-v<version>.zip`. Requires `windeployqt` (Qt 6 `bin` on `PATH`).
+Result: `dist\I2PTorrents\I2PTorrents.exe` and `I2PTorrents-windows-<arch>-v<version>.zip`. Requires Qt 6 and Visual Studio C++ build tools.
 
 Rust and Qt 6 are required. The release version comes from the `VERSION` file.
 
@@ -274,6 +294,9 @@ GUI — это настольное приложение на **Rust + Qt Widget
 cargo test --no-default-features
 # на macOS Homebrew нужны C++17 и заголовки framework:
 ./scripts/cargo-qt.sh run --features gui
+# Windows (PowerShell) — один раз, затем cargo в этом или новом терминале:
+#   .\scripts\setup-windows-dev.ps1
+#   cargo run --release --features gui
 # то же самое:
 #   export CXXFLAGS="-std=c++17 -include arm_acle.h $(pkg-config --cflags Qt6Widgets Qt6Gui Qt6Core Qt6UiTools)"
 #   cargo run --features gui
@@ -308,11 +331,20 @@ cargo test --no-default-features
 
 **Windows** (PowerShell)
 
+Запуск из исходников (один раз на машине, затем в этом или новом терминале):
+
+```powershell
+.\scripts\setup-windows-dev.ps1
+cargo run --release --features gui
+```
+
+Сборка релиза:
+
 ```powershell
 .\build-windows.ps1
 ```
 
-Результат: `dist\I2PTorrents\I2PTorrents.exe` и `I2PTorrents-windows-<arch>-v<version>.zip`. Нужен `windeployqt` (каталог `bin` Qt 6 в `PATH`).
+Результат: `dist\I2PTorrents\I2PTorrents.exe` и `I2PTorrents-windows-<arch>-v<version>.zip`. Нужны Qt 6 и Visual Studio C++ build tools.
 
 Нужны Rust и Qt 6. Версия релиза берётся из файла `VERSION`.
 

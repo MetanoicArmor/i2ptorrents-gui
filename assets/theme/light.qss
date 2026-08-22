@@ -1,7 +1,7 @@
 
 QMainWindow, QWidget#MainWindow { background: #ffffff; }
 QDialog { background: transparent; }
-QWidget { color: #1d1d1f; font-family: "Inter"; font-size: 13px; }
+QWidget { color: #1d1d1f; font-size: 13px; }
 QFrame#Sidebar, QWidget#Sidebar {
     background: transparent; border: none;
 }
@@ -12,11 +12,11 @@ QWidget#PaneSplit { background: #d8d8dc; border: none; max-width: 1px; }
 QFrame#TorrentCard, QFrame#SummaryCard, QWidget#TorrentCard, QWidget#SummaryCard {
     background: #f2f2f7; border: none; border-radius: 10px;
 }
-QLabel#AppTitle { font-size: 20px; font-weight: 650; }
+QLabel#AppTitle { font-size: 20px; font-weight: 600; }
 QLabel#AppSubtitle { color: #626875; font-size: 13px; padding: 0px; }
-QLabel#Title { color: #1d1d1f; font-size: 22px; font-weight: 650; }
+QLabel#Title { color: #1d1d1f; font-size: 22px; font-weight: 600; }
 QLabel#SectionTitle { color: #525966; font-size: 12px; font-weight: 600; }
-QLabel#TorrentName { color: #1d1d1f; font-size: 14px; font-weight: 650; padding: 0px; }
+QLabel#TorrentName { color: #1d1d1f; font-size: 14px; font-weight: 600; padding: 0px; }
 QLabel#Secondary, QLabel#StatusText { color: #626875; font-size: 12px; padding: 0px; }
 QLabel#StatusOnline { color: #245039; background: #d7ebdc; border-radius: 10px; padding: 6px 12px; }
 QLabel#StatusOffline { color: #7c302c; background: #f2d8d7; border-radius: 10px; padding: 6px 12px; }
@@ -35,6 +35,14 @@ QPushButton#AboutButton, QPushButton#SettingsButton {
     text-align: left; background: transparent; color: #1d1d1f; padding: 6px 10px; border-radius: 6px;
 }
 QPushButton#AboutButton:hover, QPushButton#SettingsButton:hover { background: rgba(0, 0, 0, 0.06); }
+QToolButton#RefreshButton {
+    background: #e8e8ed;
+    color: #1d1d1f;
+    border-radius: 9px;
+    padding: 8px 12px;
+}
+QToolButton#RefreshButton:hover { background: #ffffff; }
+QToolButton#RefreshButton:pressed { background: #dedee3; }
 QLineEdit, QSpinBox, QComboBox {
     background: #e8e8ed; border: none; border-radius: 8px;
     padding: 6px 12px; min-height: 22px;
@@ -72,11 +80,11 @@ QComboBox::drop-down {
 }
 QComboBox::down-arrow { image: none; width: 0; height: 0; }
 QComboBox QAbstractItemView {
-    background: #f6f7fa; color: #1d1d1f; border: none; outline: 0;
+    background: transparent; color: #1d1d1f; border: none; outline: none;
     selection-background-color: #e5eaf2; selection-color: #1d1d1f;
 }
 QComboBoxPrivateContainer {
-    background: #f6f7fa; border: 1px solid #d0d0d5; border-radius: 10px; padding: 4px;
+    background: transparent; border: none; border-radius: 0px; padding: 0px;
 }
 QProgressBar { background: #d6d7dd; border: none; border-radius: 3px; min-height: 7px; max-height: 7px; text-align: center; }
 QProgressBar::chunk { background: #0a84ff; border-radius: 3px; }
@@ -105,16 +113,17 @@ QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
 QCheckBox { spacing: 8px; }
 QWidget#FilesTablePane {
-    background: #ffffff; border: none; border-radius: 0px;
+    background: #ffffff; border: none; border-radius: 12px;
 }
 QWidget#FilesTableOverlay { background: transparent; border: none; }
 QTableWidget#FilesTable {
-    background: #f2f2f7; border: 1px solid #d0d0d5; border-radius: 0px;
+    background: #f2f2f7; border: none; border-radius: 12px;
     gridline-color: transparent; outline: 0;
-    alternate-background-color: #e8e8ed;
+    alternate-background-color: #e4e4e9;
 }
 QTableWidget#FilesTable::viewport {
-    background: transparent; border: none; border-radius: 0px;
+    background: transparent; border: none;
+    border-bottom-left-radius: 12px; border-bottom-right-radius: 12px;
 }
 QTableWidget#FilesTable::item {
     padding: 0px; border: none; color: #1d1d1f; background: transparent;
@@ -127,7 +136,7 @@ QTableWidget#FilesTable QWidget#FilesPriorityCell {
 }
 QTableWidget#FilesTable QToolButton#FilesPriority {
     background: #ffffff; border: none; border-radius: 6px;
-    padding: 4px 10px; min-height: 22px; color: #1d1d1f;
+    min-width: 0px; padding: 4px 4px; min-height: 22px; color: #1d1d1f;
 }
 QTableWidget#FilesTable QToolButton#FilesPriority:hover { background: #f2f2f7; }
 QTableWidget#FilesTable QToolButton#FilesPriority:disabled { background: #e8e8ed; color: #8e8e93; }
@@ -135,17 +144,29 @@ QTableWidget#FilesTable QToolButton#FilesPriority::menu-indicator {
     image: none; width: 0px; height: 0px;
 }
 QTableWidget#FilesTable QHeaderView {
-    background: #e8e8ed; border: none;
+    background: transparent; border: none;
 }
 QTableWidget#FilesTable QHeaderView::section {
-    background: #e8e8ed; color: #6e6e73;
-    border: none; border-right: none; border-radius: 0px;
-    border-bottom: 1px solid #d0d0d5; padding: 8px 8px;
+    background: #ececf1;
+    color: #6e6e73;
+    border: none;
+    border-bottom: 1px solid #d0d0d5;
+    padding: 8px 8px;
     font-weight: 600; font-size: 12px;
+}
+QTableWidget#FilesTable QHeaderView::section:first {
+    border-top-left-radius: 12px;
+}
+QTableWidget#FilesTable QHeaderView::section:last {
+    border-top-right-radius: 12px;
 }
 
 QToolTip {
     background: #f6f7fa; color: #2c3442; border: none;
     padding: 6px 10px; border-radius: 8px;
 }
-QLabel#AboutLink, QLabel#AboutLink a { color: #0a84ff; }
+QLabel#AboutLink { color: #626875; font-size: 12px; padding: 0px; }
+QLabel#AboutLink a, QLabel#AboutLink a:link, QLabel#AboutLink a:visited, QLabel#AboutLink a:hover {
+    color: #626875;
+    text-decoration: underline;
+}

@@ -38,7 +38,9 @@ fn compile_qt_chrome() {
             qmake_query("QT_INSTALL_HEADERS").unwrap_or_else(|| format!("{prefix}/include"));
         let lib_path = qmake_query("QT_INSTALL_LIBS").unwrap_or_else(|| format!("{prefix}/lib"));
         build.include(&include_path);
-        build.flag(&format!("-F{lib_path}"));
+        if cfg!(target_os = "macos") {
+            build.flag(&format!("-F{lib_path}"));
+        }
         for module in ["QtCore", "QtGui", "QtWidgets"] {
             let framework_headers =
                 PathBuf::from(&lib_path).join(format!("{module}.framework/Headers"));
@@ -57,12 +59,18 @@ fn compile_qt_chrome() {
             }
         }
         if cfg!(target_os = "windows") {
+            build.flag("/Zc:__cplusplus");
+            build.flag("/DNOMINMAX");
+            build.flag("/permissive-");
+            println!("cargo:rustc-link-search=native={lib_path}");
             println!("cargo:rustc-link-lib=dwmapi");
+            println!("cargo:rustc-link-lib=user32");
             println!("cargo:rustc-link-lib=Qt{major}Core");
             println!("cargo:rustc-link-lib=Qt{major}Gui");
             println!("cargo:rustc-link-lib=Qt{major}Widgets");
         }
         if cfg!(target_os = "linux") {
+            println!("cargo:rustc-link-search=native={lib_path}");
             println!("cargo:rustc-link-lib=Qt{major}Core");
             println!("cargo:rustc-link-lib=Qt{major}Gui");
             println!("cargo:rustc-link-lib=Qt{major}Widgets");
@@ -111,35 +119,107 @@ fn macos_qt_prefix() -> Option<PathBuf> {
 }
 
 fn find_qt() -> Option<(String, String)> {
-    for cmd in ["qmake6", "qmake", "qmake-qt5"] {
-        let output = Command::new(cmd)
-            .args(["-query", "QT_VERSION"])
-            .output()
-            .ok()?;
-        if !output.status.success() {
-            continue;
-        }
-        let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if !version.starts_with('5') && !version.starts_with('6') {
-            continue;
-        }
-        let prefix = Command::new(cmd)
-            .args(["-query", "QT_INSTALL_PREFIX"])
-            .output()
-            .ok()?;
-        if prefix.status.success() {
-            let path = String::from_utf8_lossy(&prefix.stdout).trim().to_string();
-            if !path.is_empty() && Path::new(&path).exists() {
-                return Some((path, version));
-            }
+    for cmd in qmake_commands() {
+        if let Some(result) = query_qt_prefix(&cmd) {
+            return Some(result);
         }
     }
     None
 }
 
+fn qmake_commands() -> Vec<String> {
+    let mut cmds = vec![
+        "qmake6".to_string(),
+        "qmake".to_string(),
+        "qmake-qt5".to_string(),
+    ];
+    #[cfg(target_os = "windows")]
+    if let Some(path) = find_qmake_on_windows() {
+        cmds.insert(0, path);
+    }
+    cmds
+}
+
+fn query_qt_prefix(qmake: &str) -> Option<(String, String)> {
+    let output = Command::new(qmake)
+        .args(["-query", "QT_VERSION"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if !version.starts_with('5') && !version.starts_with('6') {
+        return None;
+    }
+    let prefix = Command::new(qmake)
+        .args(["-query", "QT_INSTALL_PREFIX"])
+        .output()
+        .ok()?;
+    if !prefix.status.success() {
+        return None;
+    }
+    let path = String::from_utf8_lossy(&prefix.stdout).trim().to_string();
+    if path.is_empty() || !Path::new(&path).exists() {
+        return None;
+    }
+    Some((path, version))
+}
+
+#[cfg(target_os = "windows")]
+fn find_qmake_on_windows() -> Option<String> {
+    let mut candidates = Vec::new();
+    for key in ["QTDIR", "Qt6_DIR", "QT_ROOT"] {
+        if let Ok(root) = std::env::var(key) {
+            let qmake = PathBuf::from(&root).join("bin").join("qmake.exe");
+            if qmake.exists() {
+                candidates.push(qmake);
+            }
+        }
+    }
+    for root in ["C:\\Qt", "D:\\Qt"] {
+        let root = PathBuf::from(root);
+        if !root.is_dir() {
+            continue;
+        }
+        let Ok(versions) = std::fs::read_dir(&root) else {
+            continue;
+        };
+        for version in versions.flatten() {
+            let Ok(kits) = std::fs::read_dir(version.path()) else {
+                continue;
+            };
+            for kit in kits.flatten() {
+                let qmake = kit.path().join("bin").join("qmake.exe");
+                if qmake.exists() {
+                    candidates.push(qmake);
+                }
+            }
+        }
+    }
+    candidates.sort_by(|a, b| qt_kit_rank(a).cmp(&qt_kit_rank(b)));
+    candidates.first().map(|path| path.to_string_lossy().into_owned())
+}
+
+#[cfg(target_os = "windows")]
+fn qt_kit_rank(path: &Path) -> u8 {
+    let text = path.to_string_lossy().to_ascii_lowercase();
+    if text.contains("msvc2022_64") {
+        0
+    } else if text.contains("msvc2019_64") {
+        1
+    } else if text.contains("msvc") {
+        2
+    } else if text.contains("mingw") {
+        3
+    } else {
+        4
+    }
+}
+
 fn qmake_query(key: &str) -> Option<String> {
-    for cmd in ["qmake6", "qmake", "qmake-qt5"] {
-        let output = Command::new(cmd).args(["-query", key]).output().ok()?;
+    for cmd in qmake_commands() {
+        let output = Command::new(&cmd).args(["-query", key]).output().ok()?;
         if output.status.success() {
             let value = String::from_utf8_lossy(&output.stdout).trim().to_string();
             if !value.is_empty() {

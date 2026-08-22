@@ -409,6 +409,7 @@ fn make_surface(
 
 fn apply_chrome(g: &mut Gui) {
     g.window.set_title(&format!("{APP_NAME} {}", version()));
+    chrome::apply_app_font();
     g.window.set_style_sheet(&stylesheet(&g.settings.theme));
     chrome::apply_window_material(&g.window, &g.settings.theme);
     chrome::apply_tooltip_palette(&g.settings.theme);
@@ -987,5 +988,6 @@ fn open_settings(gui: &Rc<RefCell<Gui>>) {
     g.timer
         .start((g.settings.refresh_seconds.max(2) * 1000) as i32);
     apply_chrome(&mut g);
+    render_cards(&mut g);
     spawn_refresh(&mut g);
 }

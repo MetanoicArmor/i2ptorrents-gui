@@ -49,38 +49,9 @@ function Remove-PathWithRetry {
     }
 }
 
-function Find-Windeployqt {
-    $fromPath = Get-Command windeployqt -ErrorAction SilentlyContinue
-    if ($fromPath) {
-        return $fromPath.Source
-    }
-    $candidates = @()
-    foreach ($root in @($env:QTDIR, $env:Qt6_DIR, $env:QT_ROOT)) {
-        if ($root) {
-            $candidates += (Join-Path $root "bin\windeployqt.exe")
-            $candidates += (Join-Path $root "windeployqt.exe")
-        }
-    }
-    foreach ($qtRoot in @("C:\Qt", "D:\Qt")) {
-        if (-not (Test-Path -LiteralPath $qtRoot)) {
-            continue
-        }
-        Get-ChildItem -LiteralPath $qtRoot -Directory -ErrorAction SilentlyContinue | ForEach-Object {
-            Get-ChildItem -LiteralPath $_.FullName -Directory -ErrorAction SilentlyContinue | ForEach-Object {
-                $candidates += (Join-Path $_.FullName "bin\windeployqt.exe")
-            }
-        }
-    }
-    foreach ($path in $candidates) {
-        if ($path -and (Test-Path -LiteralPath $path)) {
-            return $path
-        }
-    }
-    return $null
-}
-
 $RepoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $RepoRoot
+. (Join-Path $RepoRoot "scripts\qt-env.ps1")
 
 $VersionFile = Join-Path $RepoRoot "VERSION"
 if (-not (Test-Path -LiteralPath $VersionFile)) {
@@ -108,12 +79,11 @@ if (Test-Path -LiteralPath $SyncFonts) {
     & $SyncFonts
 }
 
-$Windeploy = Find-Windeployqt
-if (-not $Windeploy) {
-    throw "windeployqt not found. Install Qt 6 and add its bin directory to PATH."
+$QtBin = Initialize-QtCargoEnvironment
+$Windeploy = Join-Path $QtBin "windeployqt.exe"
+if (-not (Test-Path -LiteralPath $Windeploy)) {
+    throw "windeployqt not found in $QtBin. Install Qt 6 with Qt Tools."
 }
-$QtBin = Split-Path -Parent $Windeploy
-$env:PATH = "$QtBin;$env:PATH"
 
 Write-Host "==> Building release binary"
 Invoke-NativeChecked cargo @("build", "--release", "--features", "gui")

@@ -29,7 +29,7 @@ impl Default for AppSettings {
             rpc_url: "http://127.0.0.1:9191/mytorrents".to_string(),
             torrents_dir: default_torrents_dir().to_string_lossy().into_owned(),
             refresh_seconds: 5,
-            theme: "light".to_string(),
+            theme: "night".to_string(),
             language: "en".to_string(),
             torrent_view: "detailed".to_string(),
             http_proxy: "socks5://127.0.0.1:4447".to_string(),
@@ -66,7 +66,7 @@ impl AppSettings {
                 .map(|n| n as u32)
                 .unwrap_or(5)
                 .clamp(2, 60),
-            theme: if json_string(obj.get("theme"), "") == "night" {
+            theme: if json_string(obj.get("theme"), "night") == "night" {
                 "night".to_string()
             } else {
                 "light".to_string()

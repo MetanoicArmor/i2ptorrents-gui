@@ -161,7 +161,7 @@ int i2p_confirm_remove(void *parent, const char *title, const char *text,
                        const char *cancel_label, int *delete_data);
 void i2p_set_named_text(void *parent, const char *name, const char *text);
 void i2p_set_dialog_title(void *parent, const char *title);
-void i2p_apply_app_font(int point_size, const char *fonts_dir);
+void i2p_apply_app_font(int point_size, const char *fonts_dir, const char *language);
 void i2p_shortcut_new(void *parent, const char *key, i2p_void_cb cb, void *ctx);
 
 #ifdef __cplusplus
