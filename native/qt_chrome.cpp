@@ -916,6 +916,57 @@ Qt::WindowFlags popup_window_flags() {
     return flags;
 }
 
+bool platform_supports_window_opacity() {
+#if defined(Q_OS_LINUX) || (defined(Q_OS_UNIX) && !defined(Q_OS_MAC) && !defined(Q_OS_WIN))
+    return false;
+#else
+    return true;
+#endif
+}
+
+QWidget *top_level_window_for(QWidget *widget) {
+    if (widget == nullptr) {
+        return nullptr;
+    }
+    if (QWidget *window = widget->window()) {
+        return window;
+    }
+    return widget->isWindow() ? widget : nullptr;
+}
+
+QWidget *main_app_window() {
+    const QWidgetList widgets = QApplication::topLevelWidgets();
+    for (QWidget *widget : widgets) {
+        if (widget != nullptr && widget->isWindow() && qobject_cast<QDialog *>(widget) == nullptr &&
+            widget->objectName() == QLatin1String("MainWindow")) {
+            return widget;
+        }
+    }
+    return nullptr;
+}
+
+void set_popup_transient_parent(QWidget *popup, QWidget *anchor) {
+    if (popup == nullptr) {
+        return;
+    }
+    (void)popup->winId();
+    QWindow *popup_win = popup->windowHandle();
+    if (popup_win == nullptr) {
+        return;
+    }
+    QWidget *host = top_level_window_for(anchor);
+    if (host == nullptr) {
+        host = main_app_window();
+    }
+    if (host == nullptr) {
+        return;
+    }
+    (void)host->winId();
+    if (QWindow *host_win = host->windowHandle()) {
+        popup_win->setTransientParent(host_win);
+    }
+}
+
 void paint_popup_rounded_bg(QWidget *widget, const QColor &bg, const QColor &border, qreal radius) {
     QPainter painter(widget);
     painter.setRenderHint(QPainter::Antialiasing, true);
@@ -1351,7 +1402,7 @@ public:
     QFrame *surface() const { return surface_; }
     qreal radius() const { return radius_; }
 
-    void presentAsPopup() {
+    void presentAsPopup(QWidget *anchor = nullptr) {
         if (!(windowFlags() & Qt::Popup)) {
             setWindowFlags(popup_window_flags());
             setAttribute(Qt::WA_TranslucentBackground, true);
@@ -1359,6 +1410,7 @@ public:
         }
         show();
         raise();
+        set_popup_transient_parent(this, anchor != nullptr ? anchor : parentWidget());
 #ifdef Q_OS_MAC
         update_popup_rounded_mask(this, radius_);
         auto apply_glass = [this] {
@@ -1578,7 +1630,7 @@ public:
     void showBelow(QWidget *anchor) {
         sizeToAnchor(anchor);
         move(global_position_popup_below_anchor(anchor, width(), height(), 4, false));
-        presentAsPopup();
+        presentAsPopup(anchor);
         QTimer::singleShot(0, this, [this, anchor] {
             if (isVisible()) {
                 sizeToAnchor(anchor);
@@ -1935,7 +1987,7 @@ public:
     void showBelow(QWidget *anchor) {
         adjustSize();
         move(global_position_popup_below_anchor(anchor, width(), height(), 6, true));
-        presentAsPopup();
+        presentAsPopup(anchor);
         QTimer::singleShot(0, this, [this] { setFocus(Qt::PopupFocusReason); });
     }
 
@@ -3024,15 +3076,24 @@ public:
         adjustSize();
         move(clampGlobal(global_top_left, width(), height()));
         updateMask();
-        setWindowOpacity(0.0);
-        show();
-        raise();
-        fade_in_.setDuration(150);
-        fade_in_.setStartValue(0.0);
-        fade_in_.setEndValue(1.0);
-        fade_in_.start();
+        set_popup_transient_parent(this, owner_widget);
         dismiss_.stop();
         hide_timer_.stop();
+        if (platform_supports_window_opacity()) {
+            stopOpacity();
+            setWindowOpacity(0.0);
+            show();
+            raise();
+            fade_in_.setDuration(150);
+            fade_in_.setStartValue(0.0);
+            fade_in_.setEndValue(1.0);
+            fade_in_.start();
+        } else {
+            stopOpacity();
+            setWindowOpacity(1.0);
+            show();
+            raise();
+        }
         if (msec > 0) {
             hide_timer_.start(msec);
         }
@@ -3057,6 +3118,10 @@ public:
         hide_timer_.stop();
         if (!isVisible()) {
             setWindowOpacity(1.0);
+            return;
+        }
+        if (!platform_supports_window_opacity()) {
+            afterFadeOutHide();
             return;
         }
         if (fade_out_.state() == QAbstractAnimation::Running) {
@@ -3135,6 +3200,9 @@ protected:
 
     void showEvent(QShowEvent *event) override {
         QWidget::showEvent(event);
+        if (owner) {
+            set_popup_transient_parent(this, owner.data());
+        }
         if (!dwm_patched_) {
 #ifdef Q_OS_WIN
             disable_dwm_rounded_frame(this);
@@ -3533,6 +3601,7 @@ protected:
             if (QAbstractItemView *view = combo_->view()) {
                 if (QWidget *container = view->parentWidget()) {
                     container->installEventFilter(this);
+                    set_popup_transient_parent(container, combo_);
                 }
             }
         }
