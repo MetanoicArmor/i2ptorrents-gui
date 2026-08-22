@@ -10,13 +10,19 @@
 </p>
 
 <p align="center">
-  <img src="screenshots/screenshot-macos.png" alt="I2P Torrents on macOS" width="440" />
-  &nbsp;
-  <img src="screenshots/screenshot-windows.png" alt="I2P Torrents on Windows" width="440" />
+  <img src="screenshots/screenshot-macos.png" alt="I2P Torrents on macOS" width="720" />
   <br>
-  <em>macOS</em> &nbsp;·&nbsp; <em>Windows</em>
-  <br><br>
-  <img src="screenshots/screenshot-linux.png" alt="I2P Torrents on Linux" width="440" />
+  <em>macOS</em>
+</p>
+
+<p align="center">
+  <img src="screenshots/screenshot-windows.png" alt="I2P Torrents on Windows" width="720" />
+  <br>
+  <em>Windows</em>
+</p>
+
+<p align="center">
+  <img src="screenshots/screenshot-linux.png" alt="I2P Torrents on Linux" width="720" />
   <br>
   <em>Linux</em>
 </p>
