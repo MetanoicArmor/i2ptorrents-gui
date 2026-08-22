@@ -102,6 +102,12 @@ if ($Magick) {
     Invoke-NativeChecked $Magick.Source @("icon.png", "-define", "icon:auto-resize=256,128,64,48,32,24,16", "I2PTorrents.ico")
 }
 
+$SyncFonts = Join-Path $RepoRoot "scripts\sync-inter-fonts.ps1"
+if (Test-Path -LiteralPath $SyncFonts) {
+    Write-Host "==> Syncing Inter UI fonts"
+    & $SyncFonts
+}
+
 $Windeploy = Find-Windeployqt
 if (-not $Windeploy) {
     throw "windeployqt not found. Install Qt 6 and add its bin directory to PATH."
@@ -130,6 +136,19 @@ if (Test-Path -LiteralPath "I2PTorrents.ico") {
 Copy-Item "VERSION" (Join-Path $Stage "VERSION")
 Copy-Item "AUTHORS" (Join-Path $Stage "AUTHORS")
 Copy-Item "LICENSE" (Join-Path $Stage "LICENSE")
+$FontsSrc = Join-Path $RepoRoot "assets\fonts"
+if (Test-Path -LiteralPath $FontsSrc) {
+    $FontsDest = Join-Path $Stage "fonts"
+    New-Item -ItemType Directory -Path $FontsDest -Force | Out-Null
+    Get-ChildItem -LiteralPath $FontsSrc -Filter "Inter-*.otf" -File -ErrorAction SilentlyContinue |
+        Copy-Item -Destination $FontsDest -Force
+    Get-ChildItem -LiteralPath $FontsSrc -Filter "Inter-*.ttf" -File -ErrorAction SilentlyContinue |
+        Copy-Item -Destination $FontsDest -Force
+    $Ofl = Join-Path $FontsSrc "Inter-OFL.txt"
+    if (Test-Path -LiteralPath $Ofl) {
+        Copy-Item -LiteralPath $Ofl -Destination $FontsDest -Force
+    }
+}
 
 Write-Host "==> Bundling Qt with windeployqt"
 Invoke-NativeChecked $Windeploy @(

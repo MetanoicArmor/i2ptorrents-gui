@@ -168,7 +168,7 @@ extern "C" {
     ) -> c_int;
     fn i2p_set_named_text(parent: *mut c_void, name: *const c_char, text: *const c_char);
     fn i2p_set_dialog_title(parent: *mut c_void, title: *const c_char);
-    fn i2p_apply_app_font(point_size: c_int);
+    fn i2p_apply_app_font(point_size: c_int, fonts_dir: *const c_char);
     fn i2p_shortcut_new(parent: *mut c_void, key: *const c_char, cb: I2pVoidCb, ctx: *mut c_void);
 }
 
@@ -783,7 +783,13 @@ pub fn apply_window_material(widget: &dyn AsWidget, theme: &str) {
 
 pub fn apply_app_font() {
     let point_size = if cfg!(windows) { 10 } else { 13 };
-    unsafe { i2p_apply_app_font(point_size) }
+    let dir = crate::resource_fonts_dir();
+    let dir_c = dir
+        .as_ref()
+        .and_then(|path| path.to_str())
+        .map(cstr)
+        .unwrap_or_else(|| cstr(""));
+    unsafe { i2p_apply_app_font(point_size, dir_c.as_ptr()) }
 }
 
 pub fn add_shortcut(parent: &dyn AsWidget, key: &str, callback: impl Fn() + 'static) {

@@ -55,7 +55,58 @@ The app turns that into the real endpoint `/mytorrents/rpc/`.
 i2pd RPC has no authentication or TLS, so the GUI only allows loopback
 (`localhost`, `127.0.0.0/8`, `::1`).
 
-### Run from source
+#### Linux notes
+
+On most distros the **system** `i2pd` service runs as user `i2pd`, not as your
+login user. Keep `torrentsdir=/home/i2pd/torrents` (do not point it at
+`~/torrents` or another path under your home directory).
+
+1. Create the directory and give it to the daemon user:
+
+```bash
+sudo mkdir -p /home/i2pd/torrents
+sudo chown -R i2pd:i2pd /home/i2pd
+```
+
+2. Package units often set `ProtectHome=true`, which hides all of `/home/` from
+   the service. Without an exception, i2pd fails to start the `[MyTorrents]`
+   tunnel (`Permission denied` on `torrentsdir`) and RPC port `9191` stays
+   closed. Add a systemd drop-in:
+
+```bash
+sudo mkdir -p /etc/systemd/system/i2pd.service.d
+sudo tee /etc/systemd/system/i2pd.service.d/torrents.conf <<'EOF'
+[Service]
+ProtectHome=no
+EOF
+sudo systemctl daemon-reload
+sudo systemctl restart i2pd
+```
+
+3. In the GUI settings, set the torrents folder to the same path:
+   `/home/i2pd/torrents`. When RPC is connected, the GUI sends torrents to i2pd
+   over the network and does not need write access to that directory. If you use
+   offline fallback (RPC unavailable), grant your user write access, for example:
+
+```bash
+sudo usermod -aG i2pd "$USER"
+sudo chmod 775 /home/i2pd/torrents
+# log out and back in so the new group membership applies
+```
+
+4. Torrent RPC needs a recent i2pd build (openssl branch; stable 2.61.0 from
+   some repos may not expose it yet). After restart, check:
+
+```bash
+ss -tln | grep 9191
+curl -sS -X POST http://127.0.0.1:9191/mytorrents/rpc/ \
+  -H 'Content-Type: application/json' \
+  -d '{"method":"torrent-get","arguments":{"fields":["id","name"]},"tag":1}'
+```
+
+If `9191` is closed, read `/var/lib/i2pd/i2pd.log` for `MyTorrents` /
+`Permission denied` / `Can't create torrents RPC server`.
+
 
 The GUI is a **Rust + Qt Widgets** desktop app (same QSS themes). It talks to i2pd over Transmission RPC.
 
@@ -157,6 +208,60 @@ http://127.0.0.1:9191/mytorrents
 Приложение само преобразует его в фактический endpoint `/mytorrents/rpc/`.
 Поскольку RPC i2pd не поддерживает авторизацию и TLS, GUI намеренно разрешает
 подключение только к loopback-адресам (`localhost`, `127.0.0.0/8`, `::1`).
+
+#### Заметки для Linux
+
+На большинстве дистрибутивов **системный** сервис `i2pd` работает от
+пользователя `i2pd`, а не от вашего аккаунта. Используйте
+`torrentsdir=/home/i2pd/torrents` (не указывайте `~/torrents` и другие пути
+в вашем домашнем каталоге).
+
+1. Создайте каталог и передайте его пользователю демона:
+
+```bash
+sudo mkdir -p /home/i2pd/torrents
+sudo chown -R i2pd:i2pd /home/i2pd
+```
+
+2. В пакетных unit-файлах часто включён `ProtectHome=true`, из‑за чего сервис
+   не видит `/home/`. Тогда туннель `[MyTorrents]` не поднимается
+   (`Permission denied` на `torrentsdir`), а RPC-порт `9191` остаётся закрытым.
+   Добавьте drop-in для systemd:
+
+```bash
+sudo mkdir -p /etc/systemd/system/i2pd.service.d
+sudo tee /etc/systemd/system/i2pd.service.d/torrents.conf <<'EOF'
+[Service]
+ProtectHome=no
+EOF
+sudo systemctl daemon-reload
+sudo systemctl restart i2pd
+```
+
+3. В настройках GUI укажите тот же каталог: `/home/i2pd/torrents`. При
+   подключённом RPC GUI отправляет торренты в i2pd по сети и не требует прав
+   записи в этот каталог. Для offline-fallback (когда RPC недоступен) выдайте
+   своему пользователю право записи, например:
+
+```bash
+sudo usermod -aG i2pd "$USER"
+sudo chmod 775 /home/i2pd/torrents
+# перелогиньтесь, чтобы применилась новая группа
+```
+
+4. Torrent RPC нужна свежая сборка i2pd (ветка openssl; стабильный 2.61.0 из
+   некоторых репозиториев может ещё не поднимать RPC). После перезапуска
+   проверьте:
+
+```bash
+ss -tln | grep 9191
+curl -sS -X POST http://127.0.0.1:9191/mytorrents/rpc/ \
+  -H 'Content-Type: application/json' \
+  -d '{"method":"torrent-get","arguments":{"fields":["id","name"]},"tag":1}'
+```
+
+Если `9191` закрыт, смотрите `/var/lib/i2pd/i2pd.log` на сообщения про
+`MyTorrents`, `Permission denied` или `Can't create torrents RPC server`.
 
 ### Запуск из исходников
 

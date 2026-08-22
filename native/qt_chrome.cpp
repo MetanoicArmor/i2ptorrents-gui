@@ -18,6 +18,9 @@
 #include <QFileDialog>
 #include <QEasingCurve>
 #include <QEvent>
+#include <QDir>
+#include <QFileInfo>
+#include <QFontDatabase>
 #include <QFont>
 #include <QFontMetrics>
 #include <QFrame>
@@ -97,6 +100,9 @@ QWidget *as_widget(void *ptr) { return static_cast<QWidget *>(ptr); }
 
 QString qstr(const char *text) { return QString::fromUtf8(text ? text : ""); }
 
+void install_app_shutdown_helper(QWidget *main_window);
+void dismiss_transient_windows(QWidget *keep);
+
 void update_popup_rounded_mask(QWidget *widget, qreal radius);
 
 Qt::WindowFlags hosted_dialog_flags() {
@@ -121,6 +127,85 @@ Qt::WindowFlags hosted_dialog_flags() {
 #define DWMSBT_TRANSIENTWINDOW 3
 #endif
 
+void apply_opaque_dialog_chrome(QDialog *dialog, bool night);
+
+#ifdef Q_OS_LINUX
+constexpr int kLinuxDialogGlassAlpha = 200;
+
+QColor linux_dialog_glass(bool night) {
+    return night ? QColor(0x1c, 0x1c, 0x1e, kLinuxDialogGlassAlpha)
+                 : QColor(0xff, 0xff, 0xff, kLinuxDialogGlassAlpha);
+}
+
+class LinuxGlassBackdrop final : public QWidget {
+public:
+    LinuxGlassBackdrop(QWidget *parent, bool night, int alpha)
+        : QWidget(parent), fill_(night ? QColor(0x1c, 0x1c, 0x1e, alpha) : QColor(0xff, 0xff, 0xff, alpha)) {
+        setObjectName(QStringLiteral("LinuxGlassBackdrop"));
+        setAttribute(Qt::WA_TransparentForMouseEvents, true);
+        setAttribute(Qt::WA_NoSystemBackground, true);
+        setAutoFillBackground(false);
+        if (parent != nullptr) {
+            setGeometry(parent->rect());
+            lower();
+            parent->installEventFilter(this);
+        }
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing, false);
+        painter.fillRect(rect(), fill_);
+    }
+
+    bool eventFilter(QObject *watched, QEvent *event) override {
+        if (watched == parentWidget() && event->type() == QEvent::Resize) {
+            setGeometry(parentWidget()->rect());
+            lower();
+        }
+        return QWidget::eventFilter(watched, event);
+    }
+
+private:
+    QColor fill_;
+};
+
+void install_linux_glass(QWidget *host, bool night, int alpha) {
+    if (host == nullptr) {
+        return;
+    }
+    host->setAttribute(Qt::WA_StyledBackground, true);
+    if (auto *existing = host->findChild<QWidget *>(QStringLiteral("LinuxGlassBackdrop"))) {
+        existing->deleteLater();
+    }
+    auto *backdrop = new LinuxGlassBackdrop(host, night, alpha);
+    backdrop->show();
+    backdrop->lower();
+    QTimer::singleShot(0, backdrop, [backdrop, host]() {
+        if (backdrop != nullptr && host != nullptr) {
+            backdrop->setGeometry(host->rect());
+            backdrop->lower();
+        }
+    });
+}
+
+void apply_linux_window_chrome(QWidget *widget, bool night) {
+    if (widget == nullptr) {
+        return;
+    }
+    const bool dialog = qobject_cast<QDialog *>(widget) != nullptr;
+    install_linux_glass(widget, night, dialog ? kLinuxDialogGlassAlpha : 185);
+    for (QWidget *child : widget->findChildren<QWidget *>()) {
+        if (child->objectName() == QLatin1String("Sidebar")) {
+            child->setAttribute(Qt::WA_TranslucentBackground, false);
+            child->setAutoFillBackground(false);
+            install_linux_glass(child, night, 220);
+        }
+    }
+}
+#endif
+
 void apply_window_material(QWidget *widget, bool night) {
     if (widget == nullptr) {
         return;
@@ -140,8 +225,13 @@ void apply_window_material(QWidget *widget, bool night) {
         if (name == QLatin1String("Sidebar")) {
             has_panes = true;
             child->setAttribute(Qt::WA_StyledBackground, true);
+#ifdef Q_OS_LINUX
+            child->setAttribute(Qt::WA_TranslucentBackground, false);
+            child->setAutoFillBackground(false);
+#else
             child->setAttribute(Qt::WA_TranslucentBackground, true);
             child->setAutoFillBackground(false);
+#endif
         } else if (name == QLatin1String("Surface")) {
             has_panes = true;
             child->setAttribute(Qt::WA_StyledBackground, true);
@@ -165,9 +255,14 @@ void apply_window_material(QWidget *widget, bool night) {
     int backdrop = qobject_cast<QDialog *>(widget) != nullptr ? DWMSBT_TRANSIENTWINDOW
                                                               : DWMSBT_MAINWINDOW;
     DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop, sizeof(backdrop));
-#elif !defined(__APPLE__)
+#elif defined(Q_OS_LINUX)
+    apply_linux_window_chrome(widget, night);
+#else
     Q_UNUSED(night);
 #endif
+    if (qobject_cast<QDialog *>(widget) == nullptr && widget->isWindow()) {
+        install_app_shutdown_helper(widget);
+    }
 }
 
 void prepare_hosted_dialog(QDialog *dialog) {
@@ -185,6 +280,26 @@ bool stylesheet_is_night(const QString &css) {
     return css.contains(QLatin1String("QMainWindow, QWidget#MainWindow { background: #1c1c1e"));
 }
 
+void apply_opaque_dialog_chrome(QDialog *dialog, bool night) {
+    if (dialog == nullptr) {
+        return;
+    }
+    dialog->setAttribute(Qt::WA_TranslucentBackground, false);
+    dialog->setAutoFillBackground(true);
+    QPalette pal = dialog->palette();
+    pal.setColor(QPalette::Window, night ? QColor(0x1c, 0x1c, 0x1e) : QColor(0xff, 0xff, 0xff));
+    dialog->setPalette(pal);
+#ifdef Q_OS_LINUX
+    if (auto *existing = dialog->findChild<QWidget *>(QStringLiteral("LinuxGlassBackdrop"))) {
+        existing->deleteLater();
+    }
+#endif
+#ifdef Q_OS_MAC
+    (void)dialog->winId();
+    i2p_macos_nsview_apply_opaque_dialog(reinterpret_cast<void *>(dialog->winId()), night ? 1 : 0);
+#endif
+}
+
 void apply_hosted_dialog_surface(QDialog *dialog) {
     if (dialog == nullptr) {
         return;
@@ -193,13 +308,7 @@ void apply_hosted_dialog_surface(QDialog *dialog) {
     const bool night = stylesheet_is_night(dialog->styleSheet());
 #ifdef Q_OS_MAC
     if (dialog->property("i2pOpaqueChrome").toBool()) {
-        dialog->setAttribute(Qt::WA_TranslucentBackground, false);
-        dialog->setAutoFillBackground(true);
-        QPalette pal = dialog->palette();
-        pal.setColor(QPalette::Window, night ? QColor(0x1c, 0x1c, 0x1e) : QColor(0xff, 0xff, 0xff));
-        dialog->setPalette(pal);
-        (void)dialog->winId();
-        i2p_macos_nsview_apply_opaque_dialog(reinterpret_cast<void *>(dialog->winId()), night ? 1 : 0);
+        apply_opaque_dialog_chrome(dialog, night);
         return;
     }
 #endif
@@ -234,7 +343,7 @@ struct DialogMetrics {
     static constexpr int kControlMinH = 36;
     static constexpr int kQrSide = 160;
     static constexpr int kFilesHeaderMinH = 32;
-    static constexpr int kFilesTableEdge = 1;
+    static constexpr int kFilesTableEdge = 0;
     static constexpr qreal kFilesTableRadius = 10;
     static constexpr int kFilesProgressPad = 20;
     static constexpr int kFilesPriorityPad = 56;
@@ -436,9 +545,26 @@ QSize modal_dialog_size(QDialog *dialog, const QSize &fixed_size) {
     return QSize(width, height);
 }
 
+void restore_ui_after_modal(QWidget *host) {
+    if (host != nullptr) {
+        host->setEnabled(true);
+    }
+    if (QApplication *app = qApp) {
+        for (QWidget *widget : app->topLevelWidgets()) {
+            if (widget == nullptr || qobject_cast<QDialog *>(widget) != nullptr) {
+                continue;
+            }
+            widget->setEnabled(true);
+        }
+        if (host != nullptr) {
+            host->raise();
+            host->activateWindow();
+        }
+    }
+}
+
 void exec_app_modal_dialog(QDialog *dialog, QWidget *host, int wrapped_inner_w, const QSize &fixed_size,
                             const std::function<void()> &finalize = {}) {
-    Q_UNUSED(host);
     if (dialog == nullptr) {
         return;
     }
@@ -459,7 +585,17 @@ void exec_app_modal_dialog(QDialog *dialog, QWidget *host, int wrapped_inner_w, 
         }
         dialog->setFixedSize(size);
     }
+    if (host != nullptr) {
+        (void)dialog->winId();
+        (void)host->winId();
+        if (QWindow *dialog_win = dialog->windowHandle()) {
+            if (QWindow *host_win = host->windowHandle()) {
+                dialog_win->setTransientParent(host_win);
+            }
+        }
+    }
     dialog->exec();
+    restore_ui_after_modal(host);
 }
 
 void disable_dwm_rounded_frame(QWidget *widget) {
@@ -851,12 +987,19 @@ public:
 
     void setPopupColors(bool night) {
         popup_night_ = night;
+#ifdef Q_OS_LINUX
+        const int bg_alpha = 230;
+        const int border_alpha = 175;
+#else
+        const int bg_alpha = 185;
+        const int border_alpha = 150;
+#endif
         if (night) {
-            popup_bg_ = QColor(0x2c, 0x2c, 0x2e, 185);
-            popup_border_ = QColor(0x48, 0x48, 0x4a, 150);
+            popup_bg_ = QColor(0x2c, 0x2c, 0x2e, bg_alpha);
+            popup_border_ = QColor(0x48, 0x48, 0x4a, border_alpha);
         } else {
-            popup_bg_ = QColor(0xf2, 0xf2, 0xf7, 185);
-            popup_border_ = QColor(0xd0, 0xd0, 0xd5, 150);
+            popup_bg_ = QColor(0xf2, 0xf2, 0xf7, bg_alpha);
+            popup_border_ = QColor(0xd0, 0xd0, 0xd5, border_alpha);
         }
     }
 
@@ -1321,9 +1464,9 @@ public:
         setAlignment(Qt::AlignLeft | Qt::AlignTop);
         setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Minimum);
         setContentsMargins(pad_x_, pad_y_, pad_x_, pad_y_);
-        setAttribute(Qt::WA_OpaquePaintEvent, true);
+        setAttribute(Qt::WA_OpaquePaintEvent, false);
         setAutoFillBackground(false);
-        setAttribute(Qt::WA_StyledBackground, false);
+        setAttribute(Qt::WA_StyledBackground, true);
     }
 
     bool hasHeightForWidth() const override { return true; }
@@ -1345,7 +1488,6 @@ protected:
         QPainter painter(this);
         painter.setRenderHint(QPainter::TextAntialiasing, true);
         painter.setClipRect(rect());
-        painter.fillRect(rect(), rowBackground());
         painter.setPen(palette().color(QPalette::WindowText));
         const QRect inner = contentsRect().adjusted(extraBearing(), 0, 0, 0);
         QTextLayout layout(text(), font());
@@ -1383,35 +1525,6 @@ private:
 
     int extraBearing() const { return std::max(0, -fontMetrics().minLeftBearing()); }
 
-    QColor rowBackground() const {
-        const QTableWidget *table = nullptr;
-        for (QWidget *p = parentWidget(); p != nullptr; p = p->parentWidget()) {
-            table = qobject_cast<QTableWidget *>(p);
-            if (table != nullptr) {
-                break;
-            }
-        }
-        const bool night = table != nullptr ? stylesheet_is_night(table->window() != nullptr ? table->window()->styleSheet()
-                                                                                              : table->styleSheet())
-                                            : true;
-        const QColor base = night ? QColor(0x2c, 0x2c, 0x2e) : QColor(0xf2, 0xf2, 0xf7);
-        const QColor alt = night ? QColor(0x3a, 0x3a, 0x3c) : QColor(0xe8, 0xe8, 0xed);
-        if (table == nullptr) {
-            return base;
-        }
-        int row = -1;
-        for (int r = 0; r < table->rowCount(); ++r) {
-            if (table->cellWidget(r, 0) == this) {
-                row = r;
-                break;
-            }
-        }
-        if (row >= 0 && table->alternatingRowColors() && (row % 2) == 1) {
-            return alt;
-        }
-        return base;
-    }
-
     int textHeight(int width) const {
         QTextLayout layout(text(), font());
         fillLayout(&layout, width);
@@ -1436,7 +1549,42 @@ protected:
         QStyledItemDelegate::initStyleOption(option, index);
         option->rect.adjust(8, 0, -8, 0);
         option->state &= ~QStyle::State_HasFocus;
+        option->backgroundBrush = Qt::NoBrush;
     }
+};
+
+class FilesTableViewport final : public QWidget {
+public:
+    explicit FilesTableViewport(QTableWidget *table) : QWidget(), table_(table) {}
+
+protected:
+    void paintEvent(QPaintEvent *event) override {
+        if (table_ != nullptr) {
+            QPainter painter(this);
+            painter.setClipRegion(event->region());
+            painter.setRenderHint(QPainter::Antialiasing, false);
+            const QColor base = table_->palette().color(QPalette::Base);
+            const QColor alt = table_->palette().color(QPalette::AlternateBase);
+            const QRect clip = event->rect();
+            const int w = width();
+            for (int row = 0; row < table_->rowCount(); ++row) {
+                QRect row_rect = table_->visualRect(table_->model()->index(row, 0));
+                if (row_rect.isEmpty()) {
+                    continue;
+                }
+                row_rect.setLeft(0);
+                row_rect.setWidth(w);
+                if (!row_rect.intersects(clip)) {
+                    continue;
+                }
+                painter.fillRect(row_rect, (row % 2) == 1 ? alt : base);
+            }
+        }
+        QWidget::paintEvent(event);
+    }
+
+private:
+    QTableWidget *table_ = nullptr;
 };
 
 class FilesPriorityButton final : public QToolButton {
@@ -1520,32 +1668,34 @@ void clip_native_rounded(QWidget *widget, unsigned int border_rgb, int which, un
 // parenting a translucent overlay to the vibrancy dialog composites as pure black.
 class FilesTableOverlay final : public QWidget {
 public:
-    explicit FilesTableOverlay(QWidget *pane, bool night) : QWidget(pane) {
+    explicit FilesTableOverlay(QWidget *pane, bool night, const QColor &fill = QColor()) : QWidget(pane) {
         setObjectName(QStringLiteral("FilesTableOverlay"));
         setAttribute(Qt::WA_TransparentForMouseEvents, true);
         setAttribute(Qt::WA_TranslucentBackground, true);
         setAttribute(Qt::WA_NoSystemBackground, true);
         setAutoFillBackground(false);
         setFocusPolicy(Qt::NoFocus);
-        fill_ = night ? QColor(0x1c, 0x1c, 0x1e) : QColor(0xff, 0xff, 0xff);
+        fill_ = fill.isValid() ? fill
+                               : (night ? QColor(0x1c, 0x1c, 0x1e) : QColor(0xff, 0xff, 0xff));
         border_ = night ? QColor(0x63, 0x63, 0x66) : QColor(0xc6, 0xc6, 0xc8);
     }
 
-    void syncToParent() {
-        if (QWidget *pane = parentWidget()) {
-            clearMask();
-            setGeometry(pane->rect());
+    void syncToHost(const QRect &host_rect, bool behind) {
+        clearMask();
+        setGeometry(host_rect);
+        if (behind) {
+            lower();
+        } else {
             raise();
-            show();
-            update();
         }
+        show();
+        update();
     }
 
 protected:
     void paintEvent(QPaintEvent *) override {
         QPainter painter(this);
         painter.setRenderHint(QPainter::Antialiasing, true);
-        painter.setCompositionMode(QPainter::CompositionMode_Source);
         const QRectF box = QRectF(rect());
         const QRectF inner = box.adjusted(0.5, 0.5, -0.5, -0.5);
         const qreal radius = DialogMetrics::kFilesTableRadius;
@@ -1554,7 +1704,6 @@ protected:
         wedges.addRect(box);
         wedges.addRoundedRect(inner, radius, radius);
         painter.fillPath(wedges, fill_);
-        painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
         QPen pen(border_, 1.0);
         pen.setJoinStyle(Qt::RoundJoin);
         painter.setPen(pen);
@@ -1571,6 +1720,12 @@ class FilesTablePane final : public QWidget {
 public:
     explicit FilesTablePane(QWidget *parent, bool night) : QWidget(parent) {
         setObjectName(QStringLiteral("FilesTablePane"));
+#ifdef Q_OS_LINUX
+        setAttribute(Qt::WA_TranslucentBackground, true);
+        setAutoFillBackground(false);
+        setStyleSheet(QStringLiteral("background: transparent; border: none;"));
+        overlay_ = nullptr;
+#else
         setAttribute(Qt::WA_TranslucentBackground, false);
         setAutoFillBackground(true);
         const QColor fill = night ? QColor(0x1c, 0x1c, 0x1e) : QColor(0xff, 0xff, 0xff);
@@ -1578,11 +1733,13 @@ public:
         pal.setColor(QPalette::Window, fill);
         setPalette(pal);
         overlay_ = new FilesTableOverlay(this, night);
+#endif
     }
 
     void applyClip() {
         clearMask();
-        if (QTableWidget *table = findChild<QTableWidget *>()) {
+        QTableWidget *table = findChild<QTableWidget *>();
+        if (table != nullptr) {
             table->clearMask();
             if (table->horizontalHeader()) {
                 table->horizontalHeader()->clearMask();
@@ -1592,7 +1749,7 @@ public:
             table->setAttribute(Qt::WA_NativeWindow, false);
         }
         if (overlay_ != nullptr) {
-            overlay_->syncToParent();
+            overlay_->syncToHost(rect(), false);
         }
     }
 
@@ -1621,7 +1778,10 @@ void style_files_table(QTableWidget *table, const QWidget *host) {
     table->setLineWidth(0);
     table->setAttribute(Qt::WA_StyledBackground, true);
     table->setAutoFillBackground(false);
-    table->viewport()->setAutoFillBackground(true);
+    table->setAlternatingRowColors(false);
+    table->setViewport(new FilesTableViewport(table));
+    table->viewport()->setAttribute(Qt::WA_StyledBackground, true);
+    table->viewport()->setAutoFillBackground(false);
     table->setItemDelegate(new FilesItemDelegate(table));
 
     if (QStyle *fusion = QStyleFactory::create(QStringLiteral("Fusion"))) {
@@ -1637,6 +1797,8 @@ void style_files_table(QTableWidget *table, const QWidget *host) {
     header->setSectionsClickable(false);
     header->setAttribute(Qt::WA_StyledBackground, true);
     header->setDefaultAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    header->setStretchLastSection(false);
+    table->setCornerButtonEnabled(false);
 
     const bool night = stylesheet_is_night(host != nullptr ? host->styleSheet() : QString());
     const QColor base = night ? QColor(0x2c, 0x2c, 0x2e) : QColor(0xf2, 0xf2, 0xf7);
@@ -2101,6 +2263,73 @@ private:
 };
 
 RoundedTooltipWindow *g_tip = nullptr;
+
+void dismiss_transient_windows(QWidget *keep) {
+    if (g_tip != nullptr) {
+        g_tip->forceHide();
+    }
+    const QWidgetList widgets = QApplication::topLevelWidgets();
+    for (QWidget *widget : widgets) {
+        if (widget == nullptr || widget == keep) {
+            continue;
+        }
+        if (auto *dialog = qobject_cast<QDialog *>(widget)) {
+            if (dialog->isModal()) {
+                dialog->reject();
+            } else {
+                dialog->close();
+            }
+            continue;
+        }
+        const Qt::WindowFlags flags = widget->windowFlags();
+        if (!widget->isVisible()) {
+            continue;
+        }
+        if (flags.testFlag(Qt::Popup) || flags.testFlag(Qt::ToolTip) || flags.testFlag(Qt::Tool) ||
+            flags.testFlag(Qt::SplashScreen)) {
+            widget->close();
+        }
+    }
+}
+
+class MainWindowShutdownFilter final : public QObject {
+public:
+    explicit MainWindowShutdownFilter(QWidget *main) : QObject(main), main_(main) {}
+
+protected:
+    bool eventFilter(QObject *watched, QEvent *event) override {
+        if (watched == main_ && event->type() == QEvent::Close) {
+            dismiss_transient_windows(main_);
+        }
+        return QObject::eventFilter(watched, event);
+    }
+
+private:
+    QWidget *main_ = nullptr;
+};
+
+void install_app_shutdown_helper(QWidget *main_window) {
+    if (main_window == nullptr || !main_window->isWindow() || qobject_cast<QDialog *>(main_window) != nullptr) {
+        return;
+    }
+    static QPointer<QWidget> tracked_main;
+    static bool app_hooks_installed = false;
+    if (tracked_main == main_window) {
+        return;
+    }
+    tracked_main = main_window;
+    main_window->installEventFilter(new MainWindowShutdownFilter(main_window));
+    if (app_hooks_installed || qApp == nullptr) {
+        return;
+    }
+    app_hooks_installed = true;
+    qApp->setQuitOnLastWindowClosed(true);
+    QObject::connect(qApp, &QApplication::aboutToQuit, qApp, [] {
+        if (tracked_main != nullptr) {
+            dismiss_transient_windows(tracked_main.data());
+        }
+    });
+}
 
 RoundedTooltipWindow *ensure_tip() {
     if (g_tip == nullptr) {
@@ -2815,17 +3044,21 @@ void i2p_files_exec(void *parent, const i2p_files_in *in, i2p_file_change_cb cb,
     QWidget *host = as_widget(parent);
     QDialog dialog(nullptr, hosted_dialog_flags());
     prepare_hosted_dialog(&dialog);
+#ifdef Q_OS_MAC
     // Solid chrome so rounded table wedges can match the dialog fill (no black ears on glass).
     dialog.setProperty("i2pOpaqueChrome", true);
+#endif
     dialog.setWindowTitle(qstr(in->title));
     dialog.setFixedWidth(DialogMetrics::kFilesW);
     if (in->stylesheet && in->stylesheet[0] != '\0') {
         dialog.setStyleSheet(qstr(in->stylesheet));
     }
     const bool night = stylesheet_is_night(dialog.styleSheet());
+#ifdef Q_OS_MAC
     dialog.setStyleSheet(dialog.styleSheet() +
                          (night ? QStringLiteral("\nQDialog { background: #1c1c1e; }")
                                 : QStringLiteral("\nQDialog { background: #ffffff; }")));
+#endif
     const QMargins margins = DialogMetrics::dialog_margins(16, 16);
     const int inner_w = DialogMetrics::inner_w(DialogMetrics::kFilesW, margins);
     auto *layout = new QVBoxLayout(&dialog);
@@ -2863,7 +3096,6 @@ void i2p_files_exec(void *parent, const i2p_files_in *in, i2p_file_change_cb cb,
         table->setSelectionMode(QAbstractItemView::NoSelection);
         table->setFocusPolicy(Qt::NoFocus);
         table->setEditTriggers(QAbstractItemView::NoEditTriggers);
-        table->setAlternatingRowColors(true);
         table->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
         table->horizontalHeader()->setMinimumSectionSize(28);
         table->horizontalHeader()->setStretchLastSection(false);
@@ -3049,20 +3281,100 @@ void i2p_apply_window_material(void *widget, int night) {
     apply_window_material(as_widget(widget), night != 0);
 }
 
-void i2p_apply_app_font(int point_size) {
+QString register_fonts_from_dir(const QString &dir_path) {
+    QDir dir(dir_path);
+    if (!dir.exists()) {
+        return QString();
+    }
+    QString primary;
+    const QStringList filters = {QStringLiteral("*.otf"), QStringLiteral("*.ttf"),
+                                 QStringLiteral("*.OTF"), QStringLiteral("*.TTF")};
+    for (const QFileInfo &info : dir.entryInfoList(filters, QDir::Files)) {
+        if (!info.fileName().startsWith(QStringLiteral("Inter"), Qt::CaseInsensitive)) {
+            continue;
+        }
+        const int id = QFontDatabase::addApplicationFont(info.absoluteFilePath());
+        if (id < 0) {
+            continue;
+        }
+        for (const QString &family : QFontDatabase::applicationFontFamilies(id)) {
+            if (family.startsWith(QStringLiteral("Inter"), Qt::CaseInsensitive)) {
+                primary = family;
+            }
+        }
+    }
+    return primary;
+}
+
+QString resolve_system_apple_ui_family() {
+    const QFontDatabase db;
+    static const char *candidates[] = {"SF Pro Text", ".SF NS Text", "SF Pro Display", "SF Pro"};
+    for (const char *candidate : candidates) {
+        const QString family = QString::fromUtf8(candidate);
+        if (db.hasFamily(family)) {
+            return family;
+        }
+    }
+    return QString();
+}
+
+QString resolve_system_ui_family() {
+    const QFontDatabase db;
+    static const char *candidates[] = {"Inter",           "SF Pro Text", ".SF NS Text",
+                                       "Segoe UI Variable", "Segoe UI",    "Noto Sans"};
+    for (const char *candidate : candidates) {
+        const QString family = QString::fromUtf8(candidate);
+        if (db.hasFamily(family)) {
+            return family;
+        }
+    }
+    return QStringLiteral("sans-serif");
+}
+
+void i2p_apply_app_font(int point_size, const char *fonts_dir) {
     QApplication *app = qApp;
     if (app == nullptr) {
         return;
     }
+    QString family;
+    QStringList fallbacks;
 #ifdef Q_OS_MAC
-    QFont font = app->font();
-    font.setPointSize(point_size);
+    family = resolve_system_apple_ui_family();
+    fallbacks = {QStringLiteral("SF Pro Display"), QStringLiteral(".AppleSystemUIFont"),
+                 QStringLiteral(".SF NS Text"), QStringLiteral("Inter"), QStringLiteral("Segoe UI"),
+                 QStringLiteral("sans-serif")};
 #else
-    QFont font(QStringLiteral("Inter"), point_size);
-    font.setFamilies({QStringLiteral("Inter"), QStringLiteral("Segoe UI"), QStringLiteral("Noto Sans"),
-                      QStringLiteral("sans-serif")});
-    font.setStyleHint(QFont::SansSerif);
+    if (fonts_dir != nullptr && fonts_dir[0] != '\0') {
+        family = register_fonts_from_dir(qstr(fonts_dir));
+    }
+    if (family.isEmpty()) {
+        const QFontDatabase db;
+        if (db.hasFamily(QStringLiteral("Inter"))) {
+            family = QStringLiteral("Inter");
+        }
+    }
+    const QString optional_apple = resolve_system_apple_ui_family();
+    fallbacks = {QStringLiteral("Inter"), optional_apple, QStringLiteral("SF Pro Display"),
+                 QStringLiteral("Segoe UI"), QStringLiteral("Noto Sans"), QStringLiteral("sans-serif")};
+    fallbacks.removeAll(QString());
+    if (family.isEmpty()) {
+        family = resolve_system_ui_family();
+    }
 #endif
+    if (family.isEmpty()) {
+        family = QStringLiteral("Inter");
+    }
+    QFont font(family);
+    font.setPointSize(point_size);
+    QStringList families = {family};
+    for (const QString &fallback : fallbacks) {
+        if (!fallback.isEmpty() && fallback != family && !families.contains(fallback)) {
+            families.push_back(fallback);
+        }
+    }
+    font.setFamilies(families);
+    font.setStyleStrategy(QFont::PreferAntialias);
+    font.setHintingPreference(QFont::PreferFullHinting);
     app->setFont(font);
 }
 

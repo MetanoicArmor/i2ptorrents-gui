@@ -12,3 +12,6 @@ I2PTorrents.AppDir/
 appimagetool-*.AppImage
 I2PTorrents-*.zip
 I2PTorrents-*.AppImage
+assets/fonts/*.otf
+assets/fonts/*.ttf
+assets/fonts/.inter-*.zip

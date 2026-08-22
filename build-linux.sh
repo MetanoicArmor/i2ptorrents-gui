@@ -172,6 +172,7 @@ esac
 
 echo "==> Building ${APP_NAME} ${RELEASE_VERSION} for Linux ${LINUX_ARCH}"
 make_icons
+"${ROOT}/scripts/sync-inter-fonts.sh"
 
 echo "==> Building release binary"
 require_cmd cargo

@@ -67,6 +67,16 @@ copy_runtime_files() {
   elif [ -f "${ROOT}/ton_donation_qr.png" ]; then
     cp "${ROOT}/ton_donation_qr.png" "${dest}/ton_donation_qr.png"
   fi
+  if [ -d "${ROOT}/assets/fonts" ]; then
+    mkdir -p "${dest}/fonts"
+    for font in "${ROOT}/assets/fonts"/Inter-*.otf "${ROOT}/assets/fonts"/Inter-*.ttf; do
+      [ -f "${font}" ] || continue
+      cp "${font}" "${dest}/fonts/"
+    done
+    if [ -f "${ROOT}/assets/fonts/Inter-OFL.txt" ]; then
+      cp "${ROOT}/assets/fonts/Inter-OFL.txt" "${dest}/fonts/"
+    fi
+  fi
 }
 
 make_icons() {

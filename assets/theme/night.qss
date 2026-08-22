@@ -1,7 +1,7 @@
 
 QMainWindow, QWidget#MainWindow { background: #1c1c1e; }
 QDialog { background: transparent; }
-QWidget { color: #f5f5f7; font-size: 13px; }
+QWidget { color: #f5f5f7; font-family: "Inter"; font-size: 13px; }
 QFrame#Sidebar, QWidget#Sidebar {
     background: transparent; border: none;
 }
@@ -109,12 +109,15 @@ QWidget#FilesTablePane {
 }
 QWidget#FilesTableOverlay { background: transparent; border: none; }
 QTableWidget#FilesTable {
-    background: #2c2c2e; border: none; border-radius: 0px;
+    background: #2c2c2e; border: 1px solid #48484a; border-radius: 0px;
     gridline-color: transparent; outline: 0;
     alternate-background-color: #3a3a3c;
 }
+QTableWidget#FilesTable::viewport {
+    background: transparent; border: none; border-radius: 0px;
+}
 QTableWidget#FilesTable::item {
-    padding: 0px; border: none; color: #f5f5f7;
+    padding: 0px; border: none; color: #f5f5f7; background: transparent;
 }
 QTableWidget#FilesTable QLabel#FilesName {
     background: transparent; color: #f5f5f7;
@@ -136,8 +139,8 @@ QTableWidget#FilesTable QHeaderView {
 }
 QTableWidget#FilesTable QHeaderView::section {
     background: #3a3a3c; color: #a1a1a6;
-    border: none; border-right: none;
-    border-bottom: 1px solid #48484a; padding: 8px 10px;
+    border: none; border-right: none; border-radius: 0px;
+    border-bottom: 1px solid #48484a; padding: 8px 8px;
     font-weight: 600; font-size: 12px;
 }
 

@@ -896,6 +896,11 @@ fn import_source(
     if content.is_empty() {
         return Err(t("rpc_empty_file"));
     }
+    if rpc_online {
+        let rpc = TransmissionRPC::new(&settings.rpc_url)?;
+        rpc.add_torrent_bytes(&content).map_err(|e| e.0)?;
+        return Ok(None);
+    }
     let filename = Path::new(source)
         .file_name()
         .map(|n| n.to_string_lossy().into_owned())
@@ -906,10 +911,6 @@ fn import_source(
         .map_err(|e| e.to_string())?
         .join(&filename);
     std::fs::write(&dest, &content).map_err(|e| e.to_string())?;
-    if rpc_online {
-        let rpc = TransmissionRPC::new(&settings.rpc_url)?;
-        rpc.add_torrent_bytes(&content).map_err(|e| e.0)?;
-    }
     Ok(Some(dest.display().to_string()))
 }
 
