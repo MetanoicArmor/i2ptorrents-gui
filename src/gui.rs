@@ -83,7 +83,7 @@ pub fn run() -> i32 {
 
     let settings = AppSettings::load();
     set_language(&settings.language);
-    window.set_style_sheet(stylesheet(&settings.theme));
+    window.set_style_sheet(&stylesheet(&settings.theme));
     chrome::install_rounded_tooltips();
     chrome::apply_tooltip_palette(&settings.theme);
 
@@ -91,12 +91,18 @@ pub fn run() -> i32 {
     let holder: Rc<RefCell<Option<Rc<RefCell<Gui>>>>> = Rc::new(RefCell::new(None));
 
     let mut outer = HBoxLayout::with_parent(&window);
-    outer.set_contents_margins(14, 14, 14, 14);
-    outer.set_spacing(12);
+    outer.set_contents_margins(0, 0, 0, 0);
+    outer.set_spacing(0);
 
     let (sidebar, filter_ptrs, settings_ptr, about_ptr, subtitle_ptr, section_ptr) =
         make_sidebar(&holder);
     outer.add(sidebar);
+
+    let split = Widget::new().build();
+    split.set_object_name("PaneSplit");
+    chrome::set_object_name_ptr(split.widget_ptr() as usize, "PaneSplit");
+    split.set_fixed_width(1);
+    outer.add(split);
 
     let (surface, scroll_ptr, status_ptr, summary_ptr, add_ptr, search_ptr, refresh_ptr) =
         make_surface(&holder);
@@ -155,6 +161,7 @@ pub fn run() -> i32 {
         apply_chrome(&mut g);
         render_cards(&mut g);
         g.window.show();
+        chrome::apply_window_material(&g.window, &g.settings.theme);
         spawn_refresh(&mut g);
     }
 
@@ -255,14 +262,16 @@ fn make_sidebar(
 ) -> (Widget, [usize; 3], usize, usize, usize, usize) {
     let sidebar = Widget::new().build();
     sidebar.set_object_name("Sidebar");
-    sidebar.set_fixed_width(210);
+    chrome::set_object_name_ptr(sidebar.widget_ptr() as usize, "Sidebar");
+    sidebar.set_fixed_width(220);
     let mut side = VBoxLayout::with_parent(&sidebar);
-    side.set_contents_margins(14, 16, 14, 14);
+    side.set_contents_margins(12, if cfg!(target_os = "macos") { 40 } else { 14 }, 12, 12);
+    side.set_spacing(2);
     let title = Label::new(APP_NAME).build();
-    title.set_object_name("Title");
+    title.set_object_name("AppTitle");
     side.add(title);
     let subtitle = Label::new(&t("subtitle")).build();
-    subtitle.set_object_name("Secondary");
+    subtitle.set_object_name("AppSubtitle");
     let subtitle_ptr = subtitle.widget_ptr() as usize;
     side.add(subtitle);
     side.add_spacer(Spacer::vertical(18));
@@ -325,26 +334,24 @@ fn make_surface(
 ) -> (Widget, usize, usize, usize, usize, usize, usize) {
     let surface = Widget::new().build();
     surface.set_object_name("Surface");
+    chrome::set_object_name_ptr(surface.widget_ptr() as usize, "Surface");
     let mut body = VBoxLayout::with_parent(&surface);
     body.set_contents_margins(0, 0, 0, 0);
     body.set_spacing(0);
 
     let head = Widget::new().build();
     let mut head_layout = VBoxLayout::with_parent(&head);
-    head_layout.set_contents_margins(18, 16, 18, 0);
+    head_layout.set_contents_margins(18, if cfg!(target_os = "macos") { 14 } else { 16 }, 18, 0);
     head_layout.set_spacing(12);
 
     let top = Widget::new().build();
     let mut top_layout = HBoxLayout::with_parent(&top);
-    let heading = Label::new(&t("heading_torrents")).build();
-    heading.set_object_name("Title");
-    top_layout.add(heading);
-    top_layout.add_spacer(Spacer::horizontal_expanding());
     let status = Label::new(&t("connecting")).build();
     status.set_object_name("StatusOffline");
     status.set_cursor(WHATS_THIS_CURSOR);
     let status_ptr = status.widget_ptr() as usize;
     top_layout.add(status);
+    top_layout.add_spacer(Spacer::horizontal_expanding());
     let refresh_slot = holder.clone();
     let refresh = ToolButton::new()
         .text("↻")
@@ -395,7 +402,8 @@ fn make_surface(
 
 fn apply_chrome(g: &mut Gui) {
     g.window.set_title(&format!("{APP_NAME} {}", version()));
-    g.window.set_style_sheet(stylesheet(&g.settings.theme));
+    g.window.set_style_sheet(&stylesheet(&g.settings.theme));
+    chrome::apply_window_material(&g.window, &g.settings.theme);
     chrome::apply_tooltip_palette(&g.settings.theme);
     chrome::overlay_apply_theme(g.scroll_ptr, &g.settings.theme);
     chrome::set_label_text(g.subtitle_ptr, &t("subtitle"));
@@ -507,7 +515,7 @@ fn render_cards(g: &mut Gui) {
     let cards = Widget::new().build();
     let mut layout = VBoxLayout::with_parent(&cards);
     layout.set_contents_margins(18, 12, 14, 16);
-    layout.set_spacing(8);
+    layout.set_spacing(12);
     let rows = visible_torrents(g);
     let downloads = PathBuf::from(&g.settings.torrents_dir);
     let detailed = g.settings.torrent_view != "simple";
@@ -527,9 +535,8 @@ fn render_cards(g: &mut Gui) {
     std::mem::forget(cards);
 }
 
-fn make_card(torrent: &Torrent, downloads: &Path, detailed: bool, g: &Gui) -> Widget {
-    let card = Widget::new().build();
-    card.set_object_name("TorrentCard");
+fn make_card(torrent: &Torrent, downloads: &Path, detailed: bool, g: &Gui) -> chrome::NativeWidget {
+    let card = chrome::NativeWidget::torrent_card(&g.settings.theme);
     chrome::set_tooltip(&card, &t("files_tooltip"));
     let files_torrent_id = torrent.id;
     let files_name = torrent.name.clone();

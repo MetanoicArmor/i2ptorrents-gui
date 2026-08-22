@@ -1,4 +1,7 @@
 #include "qt_chrome.h"
+#ifdef __APPLE__
+#include "macos_vibrancy.h"
+#endif
 
 #include <QAbstractItemView>
 #include <QAbstractAnimation>
@@ -99,6 +102,66 @@ Qt::WindowFlags hosted_dialog_flags() {
     return flags;
 }
 
+#ifndef DWMWA_USE_IMMERSIVE_DARK_MODE
+#define DWMWA_USE_IMMERSIVE_DARK_MODE 20
+#endif
+#ifndef DWMWA_SYSTEMBACKDROP_TYPE
+#define DWMWA_SYSTEMBACKDROP_TYPE 38
+#endif
+#ifndef DWMSBT_MAINWINDOW
+#define DWMSBT_MAINWINDOW 2
+#endif
+#ifndef DWMSBT_TRANSIENTWINDOW
+#define DWMSBT_TRANSIENTWINDOW 3
+#endif
+
+void apply_window_material(QWidget *widget, bool night) {
+    if (widget == nullptr) {
+        return;
+    }
+    widget->setAttribute(Qt::WA_TranslucentBackground, true);
+    widget->setAutoFillBackground(false);
+    (void)widget->winId();
+#ifdef __APPLE__
+    widget->setAttribute(Qt::WA_ContentsMarginsRespectsSafeArea, false);
+    i2p_macos_nsview_apply_vibrancy(reinterpret_cast<void *>(widget->winId()), night ? 1 : 0);
+#endif
+    bool has_panes = false;
+    for (QWidget *child : widget->findChildren<QWidget *>()) {
+        const QString name = child->objectName();
+        if (name == QLatin1String("Sidebar")) {
+            has_panes = true;
+            child->setAttribute(Qt::WA_StyledBackground, true);
+            child->setAttribute(Qt::WA_TranslucentBackground, true);
+            child->setAutoFillBackground(false);
+        } else if (name == QLatin1String("Surface")) {
+            has_panes = true;
+            child->setAttribute(Qt::WA_StyledBackground, true);
+            child->setAttribute(Qt::WA_TranslucentBackground, false);
+            child->setAutoFillBackground(true);
+            QPalette palette = child->palette();
+            palette.setColor(QPalette::Window, night ? QColor(0x1c, 0x1c, 0x1e) : QColor(0xff, 0xff, 0xff));
+            child->setPalette(palette);
+        }
+    }
+    if (has_panes) {
+        if (QLayout *layout = widget->layout()) {
+            layout->setContentsMargins(0, 0, 0, 0);
+            layout->setSpacing(0);
+        }
+    }
+#ifdef Q_OS_WIN
+    const HWND hwnd = reinterpret_cast<HWND>(widget->winId());
+    const BOOL dark = night ? TRUE : FALSE;
+    DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark, sizeof(dark));
+    int backdrop = qobject_cast<QDialog *>(widget) != nullptr ? DWMSBT_TRANSIENTWINDOW
+                                                              : DWMSBT_MAINWINDOW;
+    DwmSetWindowAttribute(hwnd, DWMWA_SYSTEMBACKDROP_TYPE, &backdrop, sizeof(backdrop));
+#elif !defined(__APPLE__)
+    Q_UNUSED(night);
+#endif
+}
+
 void prepare_hosted_dialog(QDialog *dialog) {
     if (dialog == nullptr) {
         return;
@@ -106,6 +169,18 @@ void prepare_hosted_dialog(QDialog *dialog) {
     dialog->setModal(true);
     dialog->setWindowModality(Qt::ApplicationModal);
     dialog->setSizeGripEnabled(false);
+    dialog->setAttribute(Qt::WA_TranslucentBackground, true);
+    dialog->setAutoFillBackground(false);
+}
+
+void apply_hosted_dialog_surface(QDialog *dialog) {
+    if (dialog == nullptr) {
+        return;
+    }
+    dialog->ensurePolished();
+    const QString css = dialog->styleSheet();
+    const bool night = !css.contains(QLatin1String("#e6eaf2"));
+    apply_window_material(dialog, night);
 }
 
 void apply_real_dialog_window(QDialog *dialog) {
@@ -293,6 +368,7 @@ void exec_app_modal_dialog(QDialog *dialog, QWidget *host, int wrapped_inner_w, 
     if (finalize) {
         finalize();
     }
+    apply_hosted_dialog_surface(dialog);
     if (!size_already_locked) {
         QSize size = modal_dialog_size(dialog, fixed_size);
         if (size.width() <= 0 || size.height() <= 0) {
@@ -385,6 +461,43 @@ QPoint global_position_popup_below_anchor(QWidget *anchor, int popup_w, int popu
                                                                                                     : pos_below;
     return clamp_popup_top_left(pos, popup_w, popup_h, geom);
 }
+
+class TorrentCardWidget final : public QWidget {
+public:
+    explicit TorrentCardWidget(bool night, QWidget *parent = nullptr) : QWidget(parent) {
+        setObjectName(QStringLiteral("TorrentCard"));
+        setAttribute(Qt::WA_TranslucentBackground, true);
+        setAttribute(Qt::WA_StyledBackground, false);
+        setAutoFillBackground(false);
+        applyTheme(night);
+    }
+
+    void applyTheme(bool night) {
+        if (night) {
+            bg_ = QColor(QStringLiteral("#2c2c2e"));
+            pane_ = QColor(QStringLiteral("#1c1c1e"));
+        } else {
+            bg_ = QColor(QStringLiteral("#f2f2f7"));
+            pane_ = QColor(QStringLiteral("#ffffff"));
+        }
+        update();
+    }
+
+protected:
+    void paintEvent(QPaintEvent *) override {
+        QPainter painter(this);
+        painter.setRenderHint(QPainter::Antialiasing, true);
+        painter.setPen(Qt::NoPen);
+        painter.setBrush(pane_);
+        painter.drawRect(rect());
+        painter.setBrush(bg_);
+        painter.drawRoundedRect(QRectF(rect()), 10.0, 10.0);
+    }
+
+private:
+    QColor bg_;
+    QColor pane_;
+};
 
 class PieceMapWidget final : public QWidget {
 public:
@@ -1370,16 +1483,14 @@ public:
         for (auto *button : {up, down}) {
             button->setAutoRaise(true);
             button->setToolButtonStyle(Qt::ToolButtonTextOnly);
-            button->setCursor(Qt::PointingHandCursor);
+            button->setCursor(Qt::ArrowCursor);
             button->setAutoRepeat(true);
             button->setAutoRepeatDelay(400);
             button->setAutoRepeatInterval(120);
-            QFont font = button->font();
-            font.setPixelSize(10);
-            button->setFont(font);
+            button->setFocusPolicy(Qt::NoFocus);
         }
-        up->setText(QStringLiteral("▲"));
-        down->setText(QStringLiteral("▼"));
+        up->setText(QString::fromUtf8("⌃"));
+        down->setText(QString::fromUtf8("⌄"));
         QObject::connect(up, &QToolButton::clicked, this, [this] {
             spin_->stepUp();
             spin_->setFocus(Qt::OtherFocusReason);
@@ -1697,6 +1808,7 @@ void i2p_widget_delete(void *widget) {
 void i2p_widget_set_object_name(void *widget, const char *name) {
     if (QWidget *w = as_widget(widget)) {
         w->setObjectName(qstr(name));
+        w->setAttribute(Qt::WA_StyledBackground, true);
         i2p_widget_repolish(widget);
     }
 }
@@ -1825,6 +1937,11 @@ void *i2p_piece_map_new(const uint8_t *have, int len) {
     auto *map = new PieceMapWidget();
     map->setHave(have, len);
     return map;
+}
+
+void *i2p_torrent_card_new(const char *theme) {
+    const bool night = qstr(theme) != QLatin1String("light");
+    return new TorrentCardWidget(night);
 }
 
 void i2p_piece_map_set_have(void *widget, const uint8_t *have, int len) {
@@ -2037,10 +2154,10 @@ int i2p_settings_exec(void *parent, const i2p_settings_in *in) {
     layout->addWidget(dir_row);
 
     layout->addWidget(new QLabel(qstr(in->refresh_label), &dialog));
-    auto *refresh = new QSpinBox(&dialog);
-    refresh->setRange(2, 60);
-    refresh->setValue(std::clamp(in->refresh_value, 2, 60));
-    refresh->setSuffix(QStringLiteral(" ") + qstr(in->seconds_suffix));
+    auto *refresh = new SpinRowWidget(&dialog);
+    refresh->spin()->setRange(2, 60);
+    refresh->spin()->setValue(std::clamp(in->refresh_value, 2, 60));
+    refresh->spin()->setSuffix(QStringLiteral(" ") + qstr(in->seconds_suffix));
     layout->addWidget(refresh);
 
     layout->addWidget(new QLabel(qstr(in->lang_label), &dialog));
@@ -2079,7 +2196,7 @@ int i2p_settings_exec(void *parent, const i2p_settings_in *in) {
     }
     g_settings_rpc = rpc->text().toStdString();
     g_settings_dir = dir->text().toStdString();
-    g_settings_refresh = refresh->value();
+    g_settings_refresh = refresh->spin()->value();
     g_settings_language = combo_data_string(language);
     g_settings_theme = combo_data_string(theme);
     g_settings_view = combo_data_string(view);
@@ -2405,6 +2522,10 @@ void i2p_set_dialog_title(void *parent, const char *title) {
     if (auto *dialog = root->findChild<QDialog *>()) {
         dialog->setWindowTitle(qstr(title));
     }
+}
+
+void i2p_apply_window_material(void *widget, int night) {
+    apply_window_material(as_widget(widget), night != 0);
 }
 
 void i2p_apply_app_font(int point_size) {

@@ -126,6 +126,7 @@ extern "C" {
     fn i2p_push_button_set_auto_exclusive(widget: *mut c_void, exclusive: c_int);
     fn i2p_push_button_set_text(widget: *mut c_void, text: *const c_char);
     fn i2p_piece_map_new(have: *const c_uchar, len: c_int) -> *mut c_void;
+    fn i2p_torrent_card_new(theme: *const c_char) -> *mut c_void;
     fn i2p_overlay_scroll_new() -> *mut c_void;
     fn i2p_overlay_scroll_set_widget(scroll: *mut c_void, child: *mut c_void);
     fn i2p_overlay_scroll_apply_theme(scroll: *mut c_void, theme: *const c_char);
@@ -155,6 +156,7 @@ extern "C" {
     fn i2p_spin_row_on_changed(row: *mut c_void, cb: I2pIntCb, ctx: *mut c_void);
     fn i2p_install_rounded_tooltips();
     fn i2p_apply_tooltip_palette(theme: *const c_char);
+    fn i2p_apply_window_material(widget: *mut c_void, night: c_int);
     fn i2p_confirm_remove(
         parent: *mut c_void,
         title: *const c_char,
@@ -238,6 +240,11 @@ impl NativeWidget {
 
     pub fn overlay_scroll() -> Self {
         Self::from_raw(unsafe { i2p_overlay_scroll_new() })
+    }
+
+    pub fn torrent_card(theme: &str) -> Self {
+        let theme = cstr(theme);
+        Self::from_raw(unsafe { i2p_torrent_card_new(theme.as_ptr()) })
     }
 
     pub fn styled_combo() -> Self {
@@ -767,6 +774,11 @@ pub fn install_rounded_tooltips() {
 pub fn apply_tooltip_palette(theme: &str) {
     let theme = cstr(theme);
     unsafe { i2p_apply_tooltip_palette(theme.as_ptr()) }
+}
+
+pub fn apply_window_material(widget: &dyn AsWidget, theme: &str) {
+    let night = i32::from(theme != "light");
+    unsafe { i2p_apply_window_material(widget.widget_ptr() as *mut c_void, night) }
 }
 
 pub fn apply_app_font() {

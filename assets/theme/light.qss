@@ -1,13 +1,20 @@
 
-QMainWindow, QDialog, QWidget#MainWindow { background: #e6eaf2; }
+QMainWindow, QWidget#MainWindow { background: #ffffff; }
+QDialog { background: #ffffff; }
 QWidget { color: #1d1d1f; font-size: 13px; }
-QFrame#Surface, QFrame#Sidebar, QWidget#Surface, QWidget#Sidebar {
-    background: #f2f4f8; border: 1px solid #ffffff; border-radius: 14px;
+QFrame#Sidebar, QWidget#Sidebar {
+    background: transparent; border: none;
 }
+QFrame#Surface, QWidget#Surface {
+    background: #ffffff; border: none;
+}
+QWidget#PaneSplit { background: #d8d8dc; border: none; max-width: 1px; }
 QFrame#TorrentCard, QFrame#SummaryCard, QWidget#TorrentCard, QWidget#SummaryCard {
-    background: #f8f9fc; border: none; border-radius: 12px;
+    background: #f2f2f7; border: none; border-radius: 10px;
 }
-QLabel#Title { font-size: 21px; font-weight: 650; }
+QLabel#AppTitle { font-size: 20px; font-weight: 650; }
+QLabel#AppSubtitle { color: #626875; font-size: 13px; padding: 0px; }
+QLabel#Title { font-size: 22px; font-weight: 650; }
 QLabel#SectionTitle { color: #525966; font-size: 12px; font-weight: 600; }
 QLabel#TorrentName { color: #1d1d1f; font-size: 14px; font-weight: 650; padding: 0px; }
 QLabel#Secondary, QLabel#StatusText { color: #626875; font-size: 12px; padding: 0px; }
@@ -21,15 +28,20 @@ QPushButton:pressed, QToolButton:pressed { background: #e4e9f2; }
 QPushButton#Primary { background: #0a84ff; color: #ffffff; }
 QPushButton#Primary:hover { background: #2d95ff; }
 QPushButton#Danger { background: #e6ebf3; color: #b94b45; }
-QPushButton#Filter { text-align: left; background: transparent; color: #525966; }
-QPushButton#Filter:checked, QPushButton#FilterOn { background: #dfe7f3; color: #1d1d1f; font-weight: 600; }
+QPushButton#Filter { text-align: left; background: transparent; color: #1d1d1f; padding: 6px 10px; border-radius: 6px; }
+QPushButton#Filter:hover { background: rgba(0, 0, 0, 0.06); }
+QPushButton#Filter:checked, QPushButton#FilterOn { background: rgba(0, 0, 0, 0.10); color: #1d1d1f; font-weight: 600; }
+QPushButton#AboutButton, QPushButton#SettingsButton {
+    text-align: left; background: transparent; color: #1d1d1f; padding: 6px 10px; border-radius: 6px;
+}
+QPushButton#AboutButton:hover, QPushButton#SettingsButton:hover { background: rgba(0, 0, 0, 0.06); }
 QLineEdit, QSpinBox, QComboBox {
     background: #ffffff; border: none; border-radius: 8px; padding: 8px 12px;
 }
 QComboBox:hover { background: #f7f8fb; }
-QLineEdit:focus, QSpinBox:focus, QComboBox:focus { border: 1px solid #0a84ff; }
+QLineEdit:focus, QSpinBox:focus, QComboBox:focus { border: none; }
 QFrame#SpinRow {
-    background: #ffffff; border: 1px solid transparent; border-radius: 8px;
+    background: #f2f2f7; border: 1px solid transparent; border-radius: 8px;
 }
 QFrame#SpinRow[focused="true"] { border: 1px solid #0a84ff; }
 QFrame#SpinRow QSpinBox {
@@ -38,19 +50,21 @@ QFrame#SpinRow QSpinBox {
 }
 QFrame#SpinRow QSpinBox:focus { border: none; }
 QWidget#SpinStepColumn {
-    background: #eef1f7; border: none;
-    border-left: 1px solid #d8dce6;
+    background: transparent; border: none;
     border-top-right-radius: 7px; border-bottom-right-radius: 7px;
 }
 QToolButton#SpinStepUp, QToolButton#SpinStepDown {
-    border: none; background: transparent; color: #3f4757;
-    font-size: 10px; min-width: 24px; max-width: 24px; min-height: 14px; padding: 0px;
-    border-radius: 0px;
+    border: none; background: transparent; color: #6e6e73;
+    font-size: 11px; min-width: 22px; max-width: 22px; min-height: 16px; padding: 0px;
 }
+QToolButton#SpinStepUp { border-top-right-radius: 7px; }
+QToolButton#SpinStepDown { border-bottom-right-radius: 7px; }
 QToolButton#SpinStepUp:hover, QToolButton#SpinStepDown:hover {
-    background: #e4e9f2; color: #1d1d1f;
+    background: rgba(0, 0, 0, 0.06); color: #1d1d1f;
 }
-QToolButton#SpinStepUp:pressed, QToolButton#SpinStepDown:pressed { background: #d5dbe8; }
+QToolButton#SpinStepUp:pressed, QToolButton#SpinStepDown:pressed {
+    background: rgba(0, 0, 0, 0.10);
+}
 QComboBox::drop-down {
     subcontrol-origin: padding; subcontrol-position: center right;
     width: 28px; border: none; background: transparent;

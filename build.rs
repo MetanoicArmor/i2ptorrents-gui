@@ -14,12 +14,24 @@ fn main() {
 fn compile_qt_chrome() {
     println!("cargo:rerun-if-changed=native/qt_chrome.cpp");
     println!("cargo:rerun-if-changed=native/qt_chrome.h");
+    println!("cargo:rerun-if-changed=native/macos_vibrancy.mm");
+    println!("cargo:rerun-if-changed=native/macos_vibrancy.h");
     let mut build = cc::Build::new();
     build.cpp(true);
     build.std("c++17");
     build.file("native/qt_chrome.cpp");
     build.include("native");
     build.warnings(false);
+    if cfg!(target_os = "macos") {
+        let mut objc = cc::Build::new();
+        objc.file("native/macos_vibrancy.mm");
+        objc.flag("-fobjc-arc");
+        objc.include("native");
+        objc.warnings(false);
+        objc.compile("i2p_macos_vibrancy");
+        println!("cargo:rustc-link-lib=framework=AppKit");
+        println!("cargo:rustc-link-lib=framework=QuartzCore");
+    }
     if let Some((prefix, version)) = find_qt() {
         let major = if version.starts_with("6.") { 6 } else { 5 };
         let include_path =

@@ -41,6 +41,8 @@ void *i2p_overlay_scroll_new(void);
 void i2p_overlay_scroll_set_widget(void *scroll, void *child);
 void i2p_overlay_scroll_apply_theme(void *scroll, const char *theme);
 
+void *i2p_torrent_card_new(const char *theme);
+
 void *i2p_styled_combo_new(void);
 void i2p_styled_combo_clear(void *combo);
 void i2p_styled_combo_add_item(void *combo, const char *text, const char *data);
@@ -66,6 +68,7 @@ void i2p_spin_row_on_changed(void *row, i2p_int_cb cb, void *ctx);
 
 void i2p_install_rounded_tooltips(void);
 void i2p_apply_tooltip_palette(const char *theme);
+void i2p_apply_window_material(void *widget, int night);
 
 typedef struct i2p_settings_in {
     const char *stylesheet;
