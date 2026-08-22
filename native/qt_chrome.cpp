@@ -109,6 +109,7 @@ QString qstr(const char *text) { return QString::fromUtf8(text ? text : ""); }
 
 void install_app_shutdown_helper(QWidget *main_window);
 void dismiss_transient_windows(QWidget *keep);
+void shutdown_app_chrome();
 
 void update_popup_rounded_mask(QWidget *widget, qreal radius);
 void apply_widget_rounded_mask(QWidget *widget, qreal radius);
@@ -3190,6 +3191,9 @@ private:
 
 RoundedTooltipWindow *g_tip = nullptr;
 
+class TooltipInterceptFilter;
+TooltipInterceptFilter *g_tooltip_filter = nullptr;
+
 void dismiss_transient_windows(QWidget *keep) {
     if (g_tip != nullptr) {
         g_tip->forceHide();
@@ -3254,6 +3258,7 @@ void install_app_shutdown_helper(QWidget *main_window) {
         if (tracked_main != nullptr) {
             dismiss_transient_windows(tracked_main.data());
         }
+        shutdown_app_chrome();
     });
 }
 
@@ -3345,6 +3350,21 @@ protected:
         return false;
     }
 };
+
+void shutdown_app_chrome() {
+    if (g_tip != nullptr) {
+        g_tip->forceHide();
+        delete g_tip;
+        g_tip = nullptr;
+    }
+    if (QApplication *app = qApp) {
+        if (g_tooltip_filter != nullptr) {
+            app->removeEventFilter(g_tooltip_filter);
+            delete g_tooltip_filter;
+            g_tooltip_filter = nullptr;
+        }
+    }
+}
 
 thread_local std::string g_combo_data;
 thread_local std::string g_line_edit_text;
@@ -3825,10 +3845,9 @@ void i2p_spin_row_on_changed(void *row, i2p_int_cb cb, void *ctx) {
 
 void i2p_install_rounded_tooltips(void) {
     if (QApplication *app = qApp) {
-        static TooltipInterceptFilter *filter = nullptr;
-        if (filter == nullptr) {
-            filter = new TooltipInterceptFilter();
-            app->installEventFilter(filter);
+        if (g_tooltip_filter == nullptr) {
+            g_tooltip_filter = new TooltipInterceptFilter();
+            app->installEventFilter(g_tooltip_filter);
         }
     }
 }

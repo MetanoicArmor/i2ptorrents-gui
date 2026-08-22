@@ -128,16 +128,26 @@ fn find_qt() -> Option<(String, String)> {
 }
 
 fn qmake_commands() -> Vec<String> {
-    let mut cmds = vec![
-        "qmake6".to_string(),
-        "qmake".to_string(),
-        "qmake-qt5".to_string(),
-    ];
     #[cfg(target_os = "windows")]
-    if let Some(path) = find_qmake_on_windows() {
-        cmds.insert(0, path);
+    {
+        let mut cmds = vec![
+            "qmake6".to_string(),
+            "qmake".to_string(),
+            "qmake-qt5".to_string(),
+        ];
+        if let Some(path) = find_qmake_on_windows() {
+            cmds.insert(0, path);
+        }
+        cmds
     }
-    cmds
+    #[cfg(not(target_os = "windows"))]
+    {
+        vec![
+            "qmake6".to_string(),
+            "qmake".to_string(),
+            "qmake-qt5".to_string(),
+        ]
+    }
 }
 
 fn query_qt_prefix(qmake: &str) -> Option<(String, String)> {
