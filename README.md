@@ -133,10 +133,10 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ./build/bin/I2PTorrents
 # Windows (PowerShell) — run once, then cmake in this or a new terminal:
-#   .\scripts\setup-windows-dev.ps1
+#   .\scripts\setup-windows-dev.ps1 -InstallQt
 #   cmake -B build -DCMAKE_BUILD_TYPE=Release
 #   cmake --build build --config Release
-#   .\build\bin\I2PTorrents.exe
+#   .\build\bin\Release\I2PTorrents.exe
 ```
 
 ### Build
@@ -171,10 +171,15 @@ Result: `dist/I2PTorrents/` (launcher + bundled Qt libs), `I2PTorrents-linux-<ar
 Run from source (once per machine, then in the same or a new terminal):
 
 ```powershell
-.\scripts\setup-windows-dev.ps1
+# auto-install Qt 6.8.3 (MSVC kit) when missing — needs Python 3 + network
+.\scripts\setup-windows-dev.ps1 -InstallQt
+
+# or point to an existing kit:
+# .\scripts\setup-windows-dev.ps1 -QtDir 'C:\Qt\6.8.3\msvc2022_64'
+
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
-.\build\bin\I2PTorrents.exe
+.\build\bin\Release\I2PTorrents.exe
 ```
 
 Release package:
@@ -304,10 +309,10 @@ cmake --build build
 ctest --test-dir build --output-on-failure
 ./build/bin/I2PTorrents
 # Windows (PowerShell) — один раз, затем cmake в этом или новом терминале:
-#   .\scripts\setup-windows-dev.ps1
+#   .\scripts\setup-windows-dev.ps1 -InstallQt
 #   cmake -B build -DCMAKE_BUILD_TYPE=Release
 #   cmake --build build --config Release
-#   .\build\bin\I2PTorrents.exe
+#   .\build\bin\Release\I2PTorrents.exe
 ```
 
 ### Сборка
@@ -342,10 +347,15 @@ ctest --test-dir build --output-on-failure
 Запуск из исходников (один раз на машине, затем в этом или новом терминале):
 
 ```powershell
-.\scripts\setup-windows-dev.ps1
+# автоустановка Qt 6.8.3 (MSVC kit), если ещё нет — нужны Python 3 и сеть
+.\scripts\setup-windows-dev.ps1 -InstallQt
+
+# или указать уже установленный kit:
+# .\scripts\setup-windows-dev.ps1 -QtDir 'C:\Qt\6.8.3\msvc2022_64'
+
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
-.\build\bin\I2PTorrents.exe
+.\build\bin\Release\I2PTorrents.exe
 ```
 
 Сборка релиза:
