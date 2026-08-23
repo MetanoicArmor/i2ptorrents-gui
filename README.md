@@ -122,21 +122,21 @@ If `9191` is closed, read `/var/lib/i2pd/i2pd.log` for `MyTorrents` /
 `Permission denied` / `Can't create torrents RPC server`.
 
 
-The GUI is a **Rust + Qt Widgets** desktop app (same QSS themes). It talks to i2pd over Transmission RPC.
+The GUI is a **Qt 6 Widgets** desktop app (same QSS themes). It talks to i2pd over Transmission RPC.
 
 ```bash
 # Qt 6 development packages, then:
-#   macOS: brew install qt@6 rust
-#   Debian/Ubuntu: sudo apt install qt6-base-dev qt6-tools-dev
-cargo test --no-default-features
-# macOS Homebrew needs C++17 and framework headers:
-./scripts/cargo-qt.sh run --features gui
-# Windows (PowerShell) — run once, then cargo in this or a new terminal:
+#   macOS: brew install qt@6 cmake
+#   Debian/Ubuntu: sudo apt install qt6-base-dev qt6-tools-dev cmake
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+ctest --test-dir build --output-on-failure
+./build/bin/I2PTorrents
+# Windows (PowerShell) — run once, then cmake in this or a new terminal:
 #   .\scripts\setup-windows-dev.ps1
-#   cargo run --release --features gui
-# same as:
-#   export CXXFLAGS="-std=c++17 -include arm_acle.h $(pkg-config --cflags Qt6Widgets Qt6Gui Qt6Core Qt6UiTools)"
-#   cargo run --features gui
+#   cmake -B build -DCMAKE_BUILD_TYPE=Release
+#   cmake --build build --config Release
+#   .\build\bin\I2PTorrents.exe
 ```
 
 ### Build
@@ -172,7 +172,9 @@ Run from source (once per machine, then in the same or a new terminal):
 
 ```powershell
 .\scripts\setup-windows-dev.ps1
-cargo run --release --features gui
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release
+.\build\bin\I2PTorrents.exe
 ```
 
 Release package:
@@ -183,7 +185,7 @@ Release package:
 
 Result: `dist\I2PTorrents\I2PTorrents.exe` and `I2PTorrents-windows-<arch>-v<version>.zip`. Requires Qt 6 and Visual Studio C++ build tools.
 
-Rust and Qt 6 are required. The release version comes from the `VERSION` file.
+Rust and Qt 6 and CMake are required. The release version comes from the `VERSION` file.
 
 ### i2pd RPC limits
 
@@ -291,21 +293,21 @@ curl -sS -X POST http://127.0.0.1:9191/mytorrents/rpc/ \
 
 ### Запуск из исходников
 
-GUI — это настольное приложение на **Rust + Qt Widgets** (те же QSS-темы). Оно ходит в i2pd по Transmission RPC.
+GUI — это настольное приложение на **Qt 6 Widgets** (те же QSS-темы). Оно ходит в i2pd по Transmission RPC.
 
 ```bash
 # пакеты Qt 6, затем:
-#   macOS: brew install qt@6 rust
-#   Debian/Ubuntu: sudo apt install qt6-base-dev qt6-tools-dev
-cargo test --no-default-features
-# на macOS Homebrew нужны C++17 и заголовки framework:
-./scripts/cargo-qt.sh run --features gui
-# Windows (PowerShell) — один раз, затем cargo в этом или новом терминале:
+#   macOS: brew install qt@6 cmake
+#   Debian/Ubuntu: sudo apt install qt6-base-dev qt6-tools-dev cmake
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+ctest --test-dir build --output-on-failure
+./build/bin/I2PTorrents
+# Windows (PowerShell) — один раз, затем cmake в этом или новом терминале:
 #   .\scripts\setup-windows-dev.ps1
-#   cargo run --release --features gui
-# то же самое:
-#   export CXXFLAGS="-std=c++17 -include arm_acle.h $(pkg-config --cflags Qt6Widgets Qt6Gui Qt6Core Qt6UiTools)"
-#   cargo run --features gui
+#   cmake -B build -DCMAKE_BUILD_TYPE=Release
+#   cmake --build build --config Release
+#   .\build\bin\I2PTorrents.exe
 ```
 
 ### Сборка
@@ -341,7 +343,9 @@ cargo test --no-default-features
 
 ```powershell
 .\scripts\setup-windows-dev.ps1
-cargo run --release --features gui
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --config Release
+.\build\bin\I2PTorrents.exe
 ```
 
 Сборка релиза:
@@ -352,7 +356,7 @@ cargo run --release --features gui
 
 Результат: `dist\I2PTorrents\I2PTorrents.exe` и `I2PTorrents-windows-<arch>-v<version>.zip`. Нужны Qt 6 и Visual Studio C++ build tools.
 
-Нужны Rust и Qt 6. Версия релиза берётся из файла `VERSION`.
+Нужны Qt 6 и CMake. Версия релиза берётся из файла `VERSION`.
 
 ### Ограничения i2pd RPC
 

@@ -4,7 +4,7 @@
 APP_NAME="I2PTorrents"
 APP_DISPLAY_NAME="I2P Torrents"
 APP_ID="org.metanoicarmor.i2ptorrents"
-CARGO_BIN="i2ptorrents-gui"
+GUI_TARGET="i2ptorrents-gui"
 
 die() {
   printf 'ERROR: %s\n' "$*" >&2
@@ -82,4 +82,48 @@ copy_runtime_files() {
 make_icons() {
   echo "==> Generating icons from image.png"
   "${ROOT}/scripts/make-icon.sh"
+}
+
+parallel_jobs() {
+  if command -v nproc >/dev/null 2>&1; then
+    nproc
+  elif command -v sysctl >/dev/null 2>&1; then
+    sysctl -n hw.ncpu 2>/dev/null || printf '4'
+  else
+    printf '4'
+  fi
+}
+
+cmake_configure_release() {
+  build_dir="$1"
+  qt_prefix="${2:-}"
+  osx_arch="${3:-}"
+  require_cmd cmake
+  mkdir -p "${build_dir}"
+  set -- -S "${ROOT}" -B "${build_dir}" -DCMAKE_BUILD_TYPE=Release
+  [ -n "${qt_prefix}" ] && set -- "$@" -DCMAKE_PREFIX_PATH="${qt_prefix}"
+  [ -n "${osx_arch}" ] && set -- "$@" -DCMAKE_OSX_ARCHITECTURES="${osx_arch}"
+  cmake "$@"
+}
+
+cmake_build_release() {
+  build_dir="$1"
+  cmake --build "${build_dir}" --config Release -j"$(parallel_jobs)"
+}
+
+cmake_release_binary() {
+  build_dir="$1"
+  for candidate in \
+    "${build_dir}/bin/${APP_NAME}" \
+    "${build_dir}/bin/${APP_NAME}.exe" \
+    "${build_dir}/Release/${APP_NAME}.exe" \
+    "${build_dir}/${APP_NAME}" \
+    "${build_dir}/${APP_NAME}.exe"
+  do
+    if [ -f "${candidate}" ]; then
+      printf '%s' "${candidate}"
+      return 0
+    fi
+  done
+  die "release binary not found under ${build_dir}"
 }

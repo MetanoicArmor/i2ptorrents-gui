@@ -47,14 +47,6 @@ find_qt_prefix_for_cpu() {
   return 1
 }
 
-ensure_rust_target() {
-  local target="$1"
-  if ! rustup target list --installed | grep -qx "${target}"; then
-    echo "==> Installing Rust target ${target}"
-    rustup target add "${target}"
-  fi
-}
-
 resolve_macos_builds() {
   HOST_CPU="$(uname -m)"
   case "${HOST_CPU}" in
@@ -67,9 +59,8 @@ resolve_macos_builds() {
   add_build() {
     local suffix="$1"
     local cpu="$2"
-    local target="$3"
-    local qt_prefix="$4"
-    BUILD_SPECS+=("${suffix}|${cpu}|${target}|${qt_prefix}")
+    local qt_prefix="$3"
+    BUILD_SPECS+=("${suffix}|${cpu}|${qt_prefix}")
   }
 
   want_arm64=0
@@ -102,10 +93,9 @@ resolve_macos_builds() {
   if [ "${want_arm64}" -eq 1 ]; then
     if qt_prefix="$(find_qt_prefix_for_cpu arm64)"; then
       if [ "${HOST_CPU}" = "arm64" ]; then
-        add_build arm64 arm64 "" "${qt_prefix}"
+        add_build arm64 arm64 "${qt_prefix}"
       else
-        ensure_rust_target aarch64-apple-darwin
-        add_build arm64 arm64 aarch64-apple-darwin "${qt_prefix}"
+        add_build arm64 arm64 "${qt_prefix}"
       fi
     elif [ "${MACOS_ARCHS}" = "arm64" ] || [ "${MACOS_ARCHS}" = "all" ]; then
       die "Qt for arm64 not found (brew install qt@6 under /opt/homebrew)"
@@ -117,10 +107,9 @@ resolve_macos_builds() {
   if [ "${want_x64}" -eq 1 ]; then
     if qt_prefix="$(find_qt_prefix_for_cpu x86_64)"; then
       if [ "${HOST_CPU}" = "x86_64" ]; then
-        add_build x64 x86_64 "" "${qt_prefix}"
+        add_build x64 x86_64 "${qt_prefix}"
       else
-        ensure_rust_target x86_64-apple-darwin
-        add_build x64 x86_64 x86_64-apple-darwin "${qt_prefix}"
+        add_build x64 x86_64 "${qt_prefix}"
       fi
     elif [ "${MACOS_ARCHS}" = "x64" ] || [ "${MACOS_ARCHS}" = "all" ] || [ "${MACOS_ARCHS}" = "intel" ]; then
       die "Qt for x86_64 not found. On Apple Silicon install Intel Homebrew Qt, e.g. arch -x86_64 /usr/local/bin/brew install qt@6"
@@ -135,8 +124,7 @@ resolve_macos_builds() {
 build_macos_release() {
   local arch_suffix="$1"
   local macos_arch="$2"
-  local rust_target="$3"
-  local qt_prefix="$4"
+  local qt_prefix="$3"
 
   echo
   echo "==> Building ${APP_NAME} ${RELEASE_VERSION} for macOS ${arch_suffix} (Qt: ${qt_prefix})"
@@ -144,18 +132,16 @@ build_macos_release() {
   export I2P_QT_PREFIX="${qt_prefix}"
   export I2P_MACOS_ARCH="${macos_arch}"
 
-  local cargo_args=(build --release --features gui)
-  if [ -n "${rust_target}" ]; then
-    cargo_args+=(--target "${rust_target}")
+  local build_dir="${ROOT}/build-${arch_suffix}"
+  rm -rf "${build_dir}"
+  local osx_arch=""
+  if [ "${macos_arch}" != "${HOST_CPU}" ]; then
+    osx_arch="${macos_arch}"
   fi
-  "${ROOT}/scripts/cargo-qt.sh" "${cargo_args[@]}"
-
+  cmake_configure_release "${build_dir}" "${qt_prefix}" "${osx_arch}"
+  cmake_build_release "${build_dir}"
   local bin
-  if [ -n "${rust_target}" ]; then
-    bin="${ROOT}/target/${rust_target}/release/${CARGO_BIN}"
-  else
-    bin="${ROOT}/target/release/${CARGO_BIN}"
-  fi
+  bin="$(cmake_release_binary "${build_dir}")"
   [ -x "${bin}" ] || die "missing binary ${bin}"
   if command -v strip >/dev/null 2>&1; then
     strip -x "${bin}" || true
@@ -260,8 +246,8 @@ resolve_macos_builds
 PRIMARY_APP=""
 PRIMARY_ZIP=""
 for spec in "${BUILD_SPECS[@]}"; do
-  IFS='|' read -r arch_suffix macos_arch rust_target qt_prefix <<< "${spec}"
-  build_macos_release "${arch_suffix}" "${macos_arch}" "${rust_target}" "${qt_prefix}"
+  IFS='|' read -r arch_suffix macos_arch qt_prefix <<< "${spec}"
+  build_macos_release "${arch_suffix}" "${macos_arch}" "${qt_prefix}"
   PRIMARY_APP="${ROOT}/dist/${APP_NAME}-${arch_suffix}.app"
   PRIMARY_ZIP="${ROOT}/${APP_NAME}-macOS-${arch_suffix}-v${RELEASE_VERSION}.zip"
 done

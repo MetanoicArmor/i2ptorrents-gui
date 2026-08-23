@@ -1,15 +1,28 @@
-pub fn stylesheet(theme: &str) -> String {
-    let base = if theme == "night" {
-        include_str!("../assets/theme/night.qss")
-    } else {
-        include_str!("../assets/theme/light.qss")
-    };
-    let overlay = if cfg!(target_os = "linux") {
-        linux_overlay(theme)
-    } else if cfg!(target_os = "windows") {
-        windows_overlay(theme)
-    } else if theme == "night" {
-        r#"
+#include "theme.hpp"
+
+#include "resources.hpp"
+
+namespace i2p {
+
+namespace {
+
+QString appleFontOverlay()
+{
+#if defined(Q_OS_WIN) || defined(Q_OS_LINUX)
+    return QStringLiteral(R"(
+QWidget {
+    font-family: "Inter", "SF Pro Text", "SF Pro Display", sans-serif;
+}
+)");
+#else
+    return {};
+#endif
+}
+
+QString macOverlay(const QString &theme)
+{
+    if (theme == QStringLiteral("night")) {
+        return QStringLiteral(R"(
 QMainWindow, QWidget#MainWindow { background: transparent; }
 QFrame#Sidebar, QWidget#Sidebar {
     background: transparent;
@@ -21,9 +34,9 @@ QFrame#Surface, QWidget#Surface {
 }
 QWidget#PaneSplit { background: rgba(255, 255, 255, 0.10); }
 QFrame#TorrentCard, QWidget#TorrentCard { background: transparent; border: none; }
-"#
-    } else {
-        r#"
+)");
+    }
+    return QStringLiteral(R"(
 QMainWindow, QWidget#MainWindow { background: transparent; }
 QFrame#Sidebar, QWidget#Sidebar {
     background: transparent;
@@ -35,28 +48,13 @@ QFrame#Surface, QWidget#Surface {
 }
 QWidget#PaneSplit { background: rgba(0, 0, 0, 0.10); }
 QFrame#TorrentCard, QWidget#TorrentCard { background: transparent; border: none; }
-"#
-    };
-    format!("{base}{overlay}{}", apple_font_overlay())
+)");
 }
 
-const APPLE_FONT_OVERLAY: &str = r#"
-QWidget {
-    font-family: "Inter", "SF Pro Text", "SF Pro Display", sans-serif;
-}
-"#;
-
-fn apple_font_overlay() -> &'static str {
-    if cfg!(any(target_os = "windows", target_os = "linux")) {
-        APPLE_FONT_OVERLAY
-    } else {
-        ""
-    }
-}
-
-fn windows_overlay(theme: &str) -> &'static str {
-    if theme == "night" {
-        r#"
+QString windowsOverlay(const QString &theme)
+{
+    if (theme == QStringLiteral("night")) {
+        return QStringLiteral(R"(
 QMainWindow, QWidget#MainWindow { background: transparent; }
 QDialog { background: transparent; }
 QFrame#Sidebar, QWidget#Sidebar {
@@ -126,9 +124,9 @@ QComboBox QAbstractItemView {
     border: none;
     outline: none;
 }
-"#
-    } else {
-        r#"
+)");
+    }
+    return QStringLiteral(R"(
 QMainWindow, QWidget#MainWindow { background: transparent; }
 QDialog { background: transparent; }
 QFrame#Sidebar, QWidget#Sidebar {
@@ -219,13 +217,13 @@ QComboBox QAbstractItemView {
     border: none;
     outline: none;
 }
-"#
-    }
+)");
 }
 
-fn linux_overlay(theme: &str) -> &'static str {
-    if theme == "night" {
-        r#"
+QString linuxOverlay(const QString &theme)
+{
+    if (theme == QStringLiteral("night")) {
+        return QStringLiteral(R"(
 QMainWindow, QWidget#MainWindow { background: transparent; }
 QDialog { background: transparent; }
 QFrame#Sidebar, QWidget#Sidebar {
@@ -243,9 +241,9 @@ QWidget#FilesTableOverlay { background: transparent; border: none; }
 QTableWidget#FilesTable { border-radius: 0px; outline: none; }
 QTableWidget#FilesTable::viewport { border-radius: 0px; background: transparent; }
 QTableWidget#FilesTable QHeaderView::section { border-radius: 0px; }
-"#
-    } else {
-        r#"
+)");
+    }
+    return QStringLiteral(R"(
 QMainWindow, QWidget#MainWindow { background: transparent; }
 QDialog { background: transparent; }
 QFrame#Sidebar, QWidget#Sidebar {
@@ -263,14 +261,36 @@ QWidget#FilesTableOverlay { background: transparent; border: none; }
 QTableWidget#FilesTable { border-radius: 0px; outline: none; }
 QTableWidget#FilesTable::viewport { border-radius: 0px; background: transparent; }
 QTableWidget#FilesTable QHeaderView::section { border-radius: 0px; }
-"#
-    }
+)");
 }
 
-pub fn tooltip_palette_colors(theme: &str) -> (&'static str, &'static str) {
-    if theme == "night" {
-        ("#2c2c2e", "#f5f5f7")
-    } else {
-        ("#f2f2f7", "#1d1d1f")
-    }
+QString platformOverlay(const QString &theme)
+{
+#if defined(Q_OS_LINUX)
+    return linuxOverlay(theme);
+#elif defined(Q_OS_WIN)
+    return windowsOverlay(theme);
+#else
+    return macOverlay(theme);
+#endif
 }
+
+} // namespace
+
+QString stylesheet(const QString &theme)
+{
+    const QString base = loadTextResource(
+        theme == QStringLiteral("night") ? QStringLiteral(":/theme/night.qss")
+                                         : QStringLiteral(":/theme/light.qss"));
+    return base + platformOverlay(theme) + appleFontOverlay();
+}
+
+std::pair<QString, QString> tooltipPaletteColors(const QString &theme)
+{
+    if (theme == QStringLiteral("night")) {
+        return {QStringLiteral("#2c2c2e"), QStringLiteral("#f5f5f7")};
+    }
+    return {QStringLiteral("#f2f2f7"), QStringLiteral("#1d1d1f")};
+}
+
+} // namespace i2p

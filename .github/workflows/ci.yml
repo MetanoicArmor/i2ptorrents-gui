@@ -8,28 +8,53 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  build:
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Test
-        run: cargo test --no-default-features
 
-  gui:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - name: Install Qt 6
+      - name: Install Qt 6 (Linux)
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y --no-install-recommends \
             qt6-base-dev qt6-base-dev-tools qt6-tools-dev \
-            libclang-dev pkg-config cmake g++ \
+            cmake g++ pkg-config \
             libgl-dev libegl1 libglib2.0-0
-      - name: Build GUI
-        run: cargo build --features gui
+
+      - name: Install Qt 6 (macOS)
+        if: runner.os == 'macOS'
+        run: brew install qt@6 cmake
+
+      - name: Install Qt 6 (Windows)
+        if: runner.os == 'Windows'
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.8.3"
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          modules: qtbase
+
+      - name: Configure
+        shell: bash
+        run: |
+          set -euo pipefail
+          extra=()
+          if [ "${{ runner.os }}" = "macOS" ]; then
+            extra+=(-DCMAKE_PREFIX_PATH="$(brew --prefix qt@6)")
+          elif [ "${{ runner.os }}" = "Windows" ]; then
+            extra+=(-DCMAKE_PREFIX_PATH="${QT_ROOT_DIR}")
+          fi
+          cmake -B build -DCMAKE_BUILD_TYPE=Release "${extra[@]}"
+
+      - name: Build and test
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake --build build --config Release
+          ctest --test-dir build -C Release --output-on-failure

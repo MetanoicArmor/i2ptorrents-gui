@@ -175,9 +175,12 @@ make_icons
 "${ROOT}/scripts/sync-inter-fonts.sh"
 
 echo "==> Building release binary"
-require_cmd cargo
-cargo build --release --features gui
-BIN="${ROOT}/target/release/${CARGO_BIN}"
+require_cmd cmake
+BUILD_DIR="${ROOT}/build"
+rm -rf "${BUILD_DIR}"
+cmake_configure_release "${BUILD_DIR}"
+cmake_build_release "${BUILD_DIR}"
+BIN="$(cmake_release_binary "${BUILD_DIR}")"
 [ -x "${BIN}" ] || die "missing binary ${BIN}"
 
 STAGE="${ROOT}/dist/${APP_NAME}"

@@ -1,6 +1,5 @@
 target/
 target2/
-.cargo/config.toml.local
 .venv/
 .DS_Store
 .omc/

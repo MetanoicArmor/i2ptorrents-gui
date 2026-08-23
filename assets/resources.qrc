@@ -1,0 +1,9 @@
+<RCC>
+    <qresource prefix="/">
+        <file alias="theme/night.qss">theme/night.qss</file>
+        <file alias="theme/light.qss">theme/light.qss</file>
+        <file alias="i18n/en.json">i18n/en.json</file>
+        <file alias="i18n/ru.json">i18n/ru.json</file>
+        <file alias="VERSION">../VERSION</file>
+    </qresource>
+</RCC>

@@ -4,7 +4,6 @@ Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
 $AppName = "I2PTorrents"
-$CargoBin = "i2ptorrents-gui"
 
 function Invoke-NativeChecked {
     param(
@@ -80,14 +79,23 @@ if (Test-Path -LiteralPath $SyncFonts) {
 }
 
 $QtBin = Initialize-QtCargoEnvironment
+$QtPrefix = Split-Path -Parent $QtBin
 $Windeploy = Join-Path $QtBin "windeployqt.exe"
 if (-not (Test-Path -LiteralPath $Windeploy)) {
     throw "windeployqt not found in $QtBin. Install Qt 6 with Qt Tools."
 }
 
 Write-Host "==> Building release binary"
-Invoke-NativeChecked cargo @("build", "--release", "--features", "gui")
-$Bin = Join-Path $RepoRoot "target\release\$CargoBin.exe"
+$BuildDir = Join-Path $RepoRoot "build"
+if (Test-Path -LiteralPath $BuildDir) {
+    Remove-PathWithRetry -Path $BuildDir
+}
+Invoke-NativeChecked cmake @("-S", $RepoRoot, "-B", $BuildDir, "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_PREFIX_PATH=$QtPrefix")
+Invoke-NativeChecked cmake @("--build", $BuildDir, "--config", "Release")
+$Bin = Join-Path $BuildDir "bin\$AppName.exe"
+if (-not (Test-Path -LiteralPath $Bin)) {
+    $Bin = Join-Path $BuildDir "Release\$AppName.exe"
+}
 if (-not (Test-Path -LiteralPath $Bin)) {
     throw "missing binary $Bin"
 }
