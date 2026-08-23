@@ -92,11 +92,7 @@ resolve_macos_builds() {
 
   if [ "${want_arm64}" -eq 1 ]; then
     if qt_prefix="$(find_qt_prefix_for_cpu arm64)"; then
-      if [ "${HOST_CPU}" = "arm64" ]; then
-        add_build arm64 arm64 "${qt_prefix}"
-      else
-        add_build arm64 arm64 "${qt_prefix}"
-      fi
+      add_build arm64 arm64 "${qt_prefix}"
     elif [ "${MACOS_ARCHS}" = "arm64" ] || [ "${MACOS_ARCHS}" = "all" ]; then
       die "Qt for arm64 not found (brew install qt@6 under /opt/homebrew)"
     else
@@ -106,11 +102,7 @@ resolve_macos_builds() {
 
   if [ "${want_x64}" -eq 1 ]; then
     if qt_prefix="$(find_qt_prefix_for_cpu x86_64)"; then
-      if [ "${HOST_CPU}" = "x86_64" ]; then
-        add_build x64 x86_64 "${qt_prefix}"
-      else
-        add_build x64 x86_64 "${qt_prefix}"
-      fi
+      add_build x64 x86_64 "${qt_prefix}"
     elif [ "${MACOS_ARCHS}" = "x64" ] || [ "${MACOS_ARCHS}" = "all" ] || [ "${MACOS_ARCHS}" = "intel" ]; then
       die "Qt for x86_64 not found. On Apple Silicon install Intel Homebrew Qt, e.g. arch -x86_64 /usr/local/bin/brew install qt@6"
     else
@@ -216,49 +208,90 @@ PLIST
   elif [ -x "${qt_prefix}/bin/qmake" ]; then
     qt_libs="$("${qt_prefix}/bin/qmake" -query QT_INSTALL_LIBS 2>/dev/null || true)"
   fi
+  # Do not ask macdeployqt to codesign: Homebrew dylibs (e.g. libbrotli) often
+  # fail there. We ad-hoc sign the finished bundle ourselves below.
   local deploy_args=("${app_dir}" -always-overwrite)
   if [ -n "${qt_libs}" ] && [ -d "${qt_libs}" ]; then
     export DYLD_FRAMEWORK_PATH="${qt_libs}${DYLD_FRAMEWORK_PATH:+:${DYLD_FRAMEWORK_PATH}}"
     deploy_args+=(-libpath="${qt_libs}")
-    ln -sfn "${qt_libs}" "${ROOT}/dist/lib"
   fi
-  "${macdeployqt}" "${deploy_args[@]}"
-  rm -f "${ROOT}/dist/lib"
+  local deploy_log
+  deploy_log="$(mktemp "${TMPDIR:-/tmp}/macdeployqt.XXXXXX")"
+  if ! "${macdeployqt}" "${deploy_args[@]}" >"${deploy_log}" 2>&1; then
+    echo "WARNING: macdeployqt exited non-zero for ${arch_suffix}; log follows:" >&2
+    cat "${deploy_log}" >&2
+  elif grep -Eqi 'ERROR:|codesign' "${deploy_log}"; then
+    echo "WARNING: macdeployqt reported codesign/deploy noise for ${arch_suffix} (continuing):" >&2
+    grep -Ei 'ERROR:|codesign' "${deploy_log}" >&2 || true
+  fi
+  rm -f "${deploy_log}"
+  [ -d "${app_dir}/Contents/Frameworks" ] \
+    || die "macdeployqt did not create Frameworks in ${app_dir}"
+  [ -x "${macos_dir}/${APP_NAME}" ] \
+    || die "missing executable after macdeployqt: ${macos_dir}/${APP_NAME}"
 
   if command -v xattr >/dev/null 2>&1; then
-    xattr -cr "${app_dir}"
+    xattr -cr "${app_dir}" || echo "WARNING: xattr -cr failed for ${app_dir}" >&2
   fi
   if command -v codesign >/dev/null 2>&1; then
     echo "==> Ad-hoc codesign"
-    codesign --force --deep --sign - "${app_dir}"
+    if ! codesign --force --deep --sign - "${app_dir}"; then
+      echo "WARNING: ad-hoc codesign failed for ${app_dir} (zip will still be packed)" >&2
+    fi
   fi
 
-  local zip_file="${ROOT}/${APP_NAME}-macOS-${arch_suffix}-v${RELEASE_VERSION}.zip"
+  local zip_name="${APP_NAME}-macOS-${arch_suffix}-v${RELEASE_VERSION}.zip"
+  local zip_file="${ROOT}/${zip_name}"
+  echo "==> Packing ${zip_file}"
   rm -f "${zip_file}"
-  ditto -c -k --sequesterRsrc --keepParent "${app_dir}" "${zip_file}"
+  # Pack from dist/ so ditto resolves a short relative path (avoids
+  # "Cannot get the real path" on some macOS/Finder states).
+  (
+    cd "${ROOT}/dist"
+    [ -d "${APP_NAME}-${arch_suffix}.app" ] \
+      || die "app bundle missing before zip: ${ROOT}/dist/${APP_NAME}-${arch_suffix}.app"
+    ditto -c -k --sequesterRsrc --keepParent \
+      "${APP_NAME}-${arch_suffix}.app" \
+      "${zip_file}"
+  ) || die "ditto failed packing ${zip_file}"
+  [ -f "${zip_file}" ] || die "zip was not created: ${zip_file}"
+  [ -s "${zip_file}" ] || die "zip is empty: ${zip_file}"
 
   echo "✔ GUI: ${app_dir}"
-  echo "✔ Packed ${zip_file}"
+  echo "✔ Packed ${zip_file} ($(du -h "${zip_file}" | awk '{print $1}'))"
 }
 
 resolve_macos_builds
+mkdir -p "${ROOT}/dist"
 
 PRIMARY_APP=""
 PRIMARY_ZIP=""
+BUILT_ZIPS=()
 for spec in "${BUILD_SPECS[@]}"; do
   IFS='|' read -r arch_suffix macos_arch qt_prefix <<< "${spec}"
   build_macos_release "${arch_suffix}" "${macos_arch}" "${qt_prefix}"
   PRIMARY_APP="${ROOT}/dist/${APP_NAME}-${arch_suffix}.app"
   PRIMARY_ZIP="${ROOT}/${APP_NAME}-macOS-${arch_suffix}-v${RELEASE_VERSION}.zip"
+  BUILT_ZIPS+=("${PRIMARY_ZIP}")
 done
 
 if [ "${#BUILD_SPECS[@]}" -eq 1 ]; then
   ln -sfn "$(basename "${PRIMARY_APP}")" "${ROOT}/dist/${APP_NAME}.app"
 else
   rm -f "${ROOT}/dist/${APP_NAME}.app"
-  echo
-  echo "Built ${#BUILD_SPECS[@]} macOS packages."
 fi
 
 echo
+echo "Built ${#BUILD_SPECS[@]} macOS package(s):"
+for zip_file in "${BUILT_ZIPS[@]}"; do
+  if [ -f "${zip_file}" ]; then
+    echo "  ✔ ${zip_file} ($(du -h "${zip_file}" | awk '{print $1}'))"
+  else
+    echo "  ✖ missing ${zip_file}" >&2
+    die "expected zip missing after build: ${zip_file}"
+  fi
+done
+
+echo
 echo "Done."
+

@@ -78,6 +78,10 @@ void filesExec(QWidget *parent,
                const QString &title,
                const QVector<TorrentFile> &files,
                const std::function<int(int, int, int)> &onChange);
+void peersExec(QWidget *parent,
+               const QString &stylesheet,
+               const QString &title,
+               const QVector<Peer> &peers);
 std::optional<bool> confirmRemove(QWidget *parent,
                                   const QString &title,
                                   const QString &text,

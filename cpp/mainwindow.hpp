@@ -49,6 +49,7 @@ private:
     void startAdd(const QString &source);
     void showActions(const Torrent &torrent, quintptr morePtr);
     void showFiles(qint64 torrentId, const QString &name);
+    void showPeers(qint64 torrentId, const QString &name);
     void confirmRemoveTorrent(qint64 torrentId, const QString &name);
     void openFolder(const QString &root, const QString &name);
     void openSettingsDialog();

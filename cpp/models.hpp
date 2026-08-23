@@ -32,6 +32,23 @@ struct TorrentFile {
     QString progressLabel() const;
 };
 
+struct Peer {
+    QString address;
+    QString identHash;
+    QString clientName;
+    quint64 rateToClient = 0;
+    quint64 rateToPeer = 0;
+    QString flagStr;
+    bool isIncoming = false;
+    bool isDownloadingFrom = false;
+    bool isUploadingTo = false;
+
+    QString displayAddress() const;
+    QString tooltipAddress() const;
+    QString ratesDownLabel() const;
+    QString ratesUpLabel() const;
+};
+
 struct Torrent {
     qint64 id = 0;
     QString name;
@@ -58,6 +75,8 @@ struct Torrent {
 TorrentStatus torrentStatusFromRpc(qint64 value);
 FilePriority filePriorityFromRpc(bool wanted, qint64 priority);
 QVector<TorrentFile> parseTorrentFiles(const QJsonObject &obj);
+QVector<Peer> parseTorrentPeers(const QJsonObject &obj);
+void syncPeerCounts(Torrent &torrent, const QJsonObject &obj);
 QString displayFileName(const QString &name);
 QVector<bool> decodePieceBitfield(const QJsonValue &raw, quint64 pieceCount, bool finished);
 QString formatBytes(quint64 value);

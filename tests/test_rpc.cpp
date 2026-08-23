@@ -17,6 +17,9 @@ private slots:
     void getTorrentsAcceptsSnakeCase();
     void getTorrentsOmitsPiecesInSimpleView();
     void getTorrentFilesRequestsOneTorrent();
+    void getTorrentPeersRequestsOneTorrent();
+    void getTorrentPeersParsesNestedJsonRpc2();
+    void getTorrentPeersParsesI2pdScientificNotation();
     void getTorrentsAcceptsJsonRpc2ResultObject();
     void addTorrentSendsBase64();
     void setFilePrioritySendsTorrentSet();
@@ -102,6 +105,7 @@ void RpcTests::getTorrentsOmitsPiecesInSimpleView()
     }
     QVERIFY(!names.contains(QStringLiteral("pieces")));
     QVERIFY(names.contains(QStringLiteral("hashString")));
+    QVERIFY(names.contains(QStringLiteral("peers")));
     QVERIFY(!names.contains(QStringLiteral("files")));
 }
 
@@ -139,6 +143,107 @@ void RpcTests::getTorrentFilesRequestsOneTorrent()
     QCOMPARE(capturedId, 7);
     QCOMPARE(files.size(), 1);
     QCOMPARE(files[0].displayName(), QStringLiteral("a.bin"));
+}
+
+void RpcTests::getTorrentPeersRequestsOneTorrent()
+{
+    QString capturedMethod;
+    int capturedId = 0;
+    QStringList capturedFields;
+    i2p::RpcClient client(
+        QStringLiteral("http://localhost:9191/mytorrents"),
+        [&](const QString &, const QByteArray &body, QString *) {
+            const QJsonObject payload = QJsonDocument::fromJson(body).object();
+            const QJsonObject arguments = payload.value(QStringLiteral("arguments")).toObject();
+            capturedMethod = payload.value(QStringLiteral("method")).toString();
+            capturedId = arguments.value(QStringLiteral("ids")).toArray().first().toInt();
+            for (const QJsonValue &field : arguments.value(QStringLiteral("fields")).toArray()) {
+                capturedFields << field.toString();
+            }
+            return QJsonDocument(QJsonObject{
+                                      {QStringLiteral("result"), QStringLiteral("success")},
+                                      {QStringLiteral("arguments"),
+                                       QJsonObject{{QStringLiteral("torrents"),
+                                                    QJsonArray{QJsonObject{
+                                                        {QStringLiteral("id"), 7},
+                                                        {QStringLiteral("peers"),
+                                                         QJsonArray{QJsonObject{
+                                                             {QStringLiteral("address"), QStringLiteral("abcd")},
+                                                             {QStringLiteral("clientName"), QStringLiteral("i2pd")},
+                                                             {QStringLiteral("rateToClient"), 100},
+                                                             {QStringLiteral("rateToPeer"), 50},
+                                                             {QStringLiteral("flagStr"), QStringLiteral("ID")},
+                                                         }}},
+                                                    }}}}}})
+                .toJson();
+        });
+    QString error;
+    const QVector<i2p::Peer> peers = client.getTorrentPeers(7, &error);
+    QCOMPARE(capturedMethod, QStringLiteral("torrent-get"));
+    QCOMPARE(capturedId, 7);
+    QVERIFY(capturedFields.contains(QStringLiteral("peers")));
+    QCOMPARE(peers.size(), 1);
+    QCOMPARE(peers[0].displayAddress(), QStringLiteral("abcd"));
+    QCOMPARE(peers[0].clientName, QStringLiteral("i2pd"));
+    QCOMPARE(peers[0].flagStr, QStringLiteral("ID"));
+}
+
+void RpcTests::getTorrentPeersParsesNestedJsonRpc2()
+{
+    i2p::RpcClient client(
+        QStringLiteral("http://localhost:9191/mytorrents"),
+        [](const QString &, const QByteArray &, QString *) {
+            return QJsonDocument(QJsonObject{
+                                      {QStringLiteral("jsonrpc"), QStringLiteral("2.0")},
+                                      {QStringLiteral("id"), 2},
+                                      {QStringLiteral("result"),
+                                       QJsonObject{
+                                           {QStringLiteral("jsonrpc"), QStringLiteral("2.0")},
+                                           {QStringLiteral("torrents"),
+                                            QJsonArray{QJsonObject{
+                                                {QStringLiteral("id"), 5},
+                                                {QStringLiteral("peersSendingToUs"), 1},
+                                                {QStringLiteral("peers"),
+                                                 QJsonArray{
+                                                     QJsonObject{
+                                                         {QStringLiteral("address"), QStringLiteral("HUK-")},
+                                                         {QStringLiteral("clientName"), QStringLiteral("I2PSnark")},
+                                                         {QStringLiteral("isDowloadingFrom"), true},
+                                                         {QStringLiteral("rateToClient"), 12676},
+                                                         {QStringLiteral("rateToPeer"), 0},
+                                                         {QStringLiteral("flagStr"), QString()},
+                                                     },
+                                                     QJsonObject{
+                                                         {QStringLiteral("address"), QStringLiteral("~zXQ")},
+                                                         {QStringLiteral("clientName"), QStringLiteral("I2PSnark")},
+                                                         {QStringLiteral("isUploading_to"), true},
+                                                         {QStringLiteral("rateToClient"), 0},
+                                                         {QStringLiteral("rateToPeer"), 0},
+                                                         {QStringLiteral("flagStr"), QString()},
+                                                     },
+                                                 }},
+                                            }}}},
+                                       }})
+                .toJson();
+        });
+    QString error;
+    const QVector<i2p::Peer> peers = client.getTorrentPeers(5, &error);
+    QVERIFY(error.isEmpty());
+    QCOMPARE(peers.size(), 2);
+    QCOMPARE(peers[0].displayAddress(), QStringLiteral("HUK-"));
+    QCOMPARE(peers[1].displayAddress(), QStringLiteral("~zXQ"));
+}
+
+void RpcTests::getTorrentPeersParsesI2pdScientificNotation()
+{
+    const QByteArray raw =
+        R"({"jsonrpc":"2.0","result":{"jsonrpc":"2.0","torrents":[{"id":5,"peers":[{"address":"HUK-","clientName":"I2PSnark","progress":5E-1},{"address":"~zXQ","clientName":"I2PSnark","progress":5E-1}]}]},"id":2})";
+    i2p::RpcClient client(QStringLiteral("http://localhost:9191/mytorrents"),
+                          [raw](const QString &, const QByteArray &, QString *) { return raw; });
+    QString error;
+    const QVector<i2p::Peer> peers = client.getTorrentPeers(5, &error);
+    QVERIFY2(error.isEmpty(), qPrintable(error));
+    QCOMPARE(peers.size(), 2);
 }
 
 void RpcTests::getTorrentsAcceptsJsonRpc2ResultObject()

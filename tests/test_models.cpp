@@ -11,6 +11,8 @@ class ModelsTests final : public QObject {
 private slots:
     void torrentParsesSnakeCaseFields();
     void torrentParsesFilesWantedPriorities();
+    void torrentParsesPeers();
+    void syncPeerCountsUsesPeersArrayWhenAggregatesZero();
     void decodePieceBitfieldMsbFirst();
     void finishedTorrentWithoutBitfieldIsComplete();
     void progressIsClamped();
@@ -67,6 +69,71 @@ void ModelsTests::torrentParsesFilesWantedPriorities()
     QCOMPARE(torrent->files[0].progressLabel(), QStringLiteral("25%"));
     QCOMPARE(torrent->files[1].displayName(), QStringLiteral("b.flac"));
     QCOMPARE(torrent->files[1].kind(), i2p::FilePriority::Skip);
+}
+
+void ModelsTests::torrentParsesPeers()
+{
+    const QJsonObject obj{
+        {QStringLiteral("id"), 3},
+        {QStringLiteral("peers"),
+         QJsonArray{
+             QJsonObject{
+                 {QStringLiteral("address"), QStringLiteral("abcd")},
+                 {QStringLiteral("identHash"), QStringLiteral("abcdEFGH1234")},
+                 {QStringLiteral("clientName"), QStringLiteral("i2pd")},
+                 {QStringLiteral("rateToClient"), 1024},
+                 {QStringLiteral("rateToPeer"), 512},
+                 {QStringLiteral("flagStr"), QStringLiteral("IDU")},
+                 {QStringLiteral("isIncoming"), true},
+                 {QStringLiteral("isDowloadingFrom"), true},
+                 {QStringLiteral("isUploading_to"), false},
+             },
+             QJsonObject{
+                 {QStringLiteral("address"), QStringLiteral("wxyz")},
+                 {QStringLiteral("client_name"), QStringLiteral("I2PSnark")},
+                 {QStringLiteral("rate_to_client"), 0},
+                 {QStringLiteral("rate_to_peer"), 2048},
+                 {QStringLiteral("flag_str"), QStringLiteral("U")},
+                 {QStringLiteral("is_uploading_to"), true},
+             },
+         }},
+    };
+    const QVector<i2p::Peer> peers = i2p::parseTorrentPeers(obj);
+    QCOMPARE(peers.size(), 2);
+    QCOMPARE(peers[0].displayAddress(), QStringLiteral("abcd"));
+    QCOMPARE(peers[0].tooltipAddress(), QStringLiteral("abcdEFGH1234"));
+    QCOMPARE(peers[0].clientName, QStringLiteral("i2pd"));
+    QCOMPARE(peers[0].flagStr, QStringLiteral("IDU"));
+    QVERIFY(peers[0].isIncoming);
+    QVERIFY(peers[0].isDownloadingFrom);
+    QVERIFY(!peers[0].isUploadingTo);
+    QCOMPARE(peers[1].displayAddress(), QStringLiteral("wxyz"));
+    QCOMPARE(peers[1].tooltipAddress(), QStringLiteral("wxyz"));
+    QVERIFY(peers[1].isUploadingTo);
+}
+
+void ModelsTests::syncPeerCountsUsesPeersArrayWhenAggregatesZero()
+{
+    QJsonObject obj{
+        {QStringLiteral("id"), 5},
+        {QStringLiteral("peersSendingToUs"), 0},
+        {QStringLiteral("peersGettingFromUs"), 0},
+        {QStringLiteral("peers"),
+         QJsonArray{
+             QJsonObject{
+                 {QStringLiteral("address"), QStringLiteral("abcd")},
+                 {QStringLiteral("isDowloadingFrom"), true},
+             },
+             QJsonObject{
+                 {QStringLiteral("address"), QStringLiteral("wxyz")},
+                 {QStringLiteral("isUploading_to"), true},
+             },
+         }},
+    };
+    const std::optional<i2p::Torrent> torrent = i2p::torrentFromRpc(obj);
+    QVERIFY(torrent.has_value());
+    QCOMPARE(torrent->peersSendingToUs, quint64(1));
+    QCOMPARE(torrent->peersGettingFromUs, quint64(1));
 }
 
 void ModelsTests::decodePieceBitfieldMsbFirst()

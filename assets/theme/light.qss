@@ -17,7 +17,7 @@ QLabel#AppSubtitle { color: #626875; font-size: 13px; padding: 0px; }
 QLabel#Title { color: #1d1d1f; font-size: 22px; font-weight: 600; }
 QLabel#SectionTitle { color: #525966; font-size: 12px; font-weight: 600; }
 QLabel#TorrentName { color: #1d1d1f; font-size: 14px; font-weight: 600; padding: 0px; }
-QLabel#Secondary, QLabel#StatusText { color: #626875; font-size: 12px; padding: 0px; }
+QLabel#Secondary, QLabel#PeersLink, QLabel#StatusText { color: #626875; font-size: 12px; padding: 0px; }
 QLabel#StatusOnline { color: #245039; background: #d7ebdc; border-radius: 10px; padding: 6px 12px; }
 QLabel#StatusOffline { color: #7c302c; background: #f2d8d7; border-radius: 10px; padding: 6px 12px; }
 QPushButton, QToolButton {
@@ -112,21 +112,24 @@ QScrollBar::handle:vertical {
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
 QCheckBox { spacing: 8px; }
-QWidget#FilesTablePane {
+QWidget#FilesTablePane, QWidget#PeersTablePane {
     background: #ffffff; border: none; border-radius: 12px;
 }
 QWidget#FilesTableOverlay { background: transparent; border: none; }
-QTableWidget#FilesTable {
+QTableWidget#FilesTable, QTableWidget#PeersTable {
     background: #f2f2f7; border: none; border-radius: 12px;
     gridline-color: transparent; outline: 0;
     alternate-background-color: #e4e4e9;
 }
-QTableWidget#FilesTable::viewport {
+QTableWidget#FilesTable::viewport, QTableWidget#PeersTable::viewport {
     background: transparent; border: none;
     border-bottom-left-radius: 12px; border-bottom-right-radius: 12px;
 }
 QTableWidget#FilesTable::item {
     padding: 0px; border: none; color: #1d1d1f; background: transparent;
+}
+QTableWidget#PeersTable::item {
+    padding: 6px 8px; border: none; color: #1d1d1f; background: transparent;
 }
 QTableWidget#FilesTable QLabel#FilesName {
     background: transparent; color: #1d1d1f;
@@ -158,6 +161,23 @@ QTableWidget#FilesTable QHeaderView::section:first {
     border-top-left-radius: 12px;
 }
 QTableWidget#FilesTable QHeaderView::section:last {
+    border-top-right-radius: 12px;
+}
+QTableWidget#PeersTable QHeaderView {
+    background: transparent; border: none;
+}
+QTableWidget#PeersTable QHeaderView::section {
+    background: #ececf1;
+    color: #6e6e73;
+    border: none;
+    border-bottom: 1px solid #d0d0d5;
+    padding: 8px 8px;
+    font-weight: 600; font-size: 12px;
+}
+QTableWidget#PeersTable QHeaderView::section:first {
+    border-top-left-radius: 12px;
+}
+QTableWidget#PeersTable QHeaderView::section:last {
     border-top-right-radius: 12px;
 }
 

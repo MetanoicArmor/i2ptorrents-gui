@@ -405,6 +405,59 @@ void filesExec(QWidget *parent,
     i2p_files_exec(parent, &input, fileChangeTrampoline, leakFileChange(onChange));
 }
 
+void peersExec(QWidget *parent,
+               const QString &stylesheet,
+               const QString &title,
+               const QVector<Peer> &peers)
+{
+    std::vector<QByteArray> addresses;
+    std::vector<QByteArray> tips;
+    std::vector<QByteArray> clients;
+    std::vector<QByteArray> downs;
+    std::vector<QByteArray> ups;
+    std::vector<QByteArray> flags;
+    std::vector<i2p_peer_row> rows;
+    addresses.reserve(peers.size());
+    tips.reserve(peers.size());
+    clients.reserve(peers.size());
+    downs.reserve(peers.size());
+    ups.reserve(peers.size());
+    flags.reserve(peers.size());
+    rows.reserve(peers.size());
+    for (const Peer &peer : peers) {
+        addresses.push_back(toUtf8(peer.displayAddress()));
+        tips.push_back(toUtf8(peer.tooltipAddress()));
+        clients.push_back(toUtf8(peer.clientName));
+        downs.push_back(toUtf8(peer.ratesDownLabel()));
+        ups.push_back(toUtf8(peer.ratesUpLabel()));
+        flags.push_back(toUtf8(peer.flagStr));
+        rows.push_back(i2p_peer_row{
+            addresses.back().constData(),
+            tips.back().constData(),
+            clients.back().constData(),
+            downs.back().constData(),
+            ups.back().constData(),
+            flags.back().constData(),
+        });
+    }
+    Utf8Holder utf8;
+    i2p_peers_in input{
+        utf8.add(stylesheet),
+        utf8.add(title),
+        utf8.add(trKey(QStringLiteral("peers_note"))),
+        utf8.add(trKey(QStringLiteral("peers_empty"))),
+        utf8.add(trKey(QStringLiteral("close"))),
+        utf8.add(trKey(QStringLiteral("peers_address"))),
+        utf8.add(trKey(QStringLiteral("peers_client"))),
+        utf8.add(trKey(QStringLiteral("peers_down"))),
+        utf8.add(trKey(QStringLiteral("peers_up"))),
+        utf8.add(trKey(QStringLiteral("peers_flags"))),
+        rows.data(),
+        static_cast<int>(rows.size()),
+    };
+    i2p_peers_exec(parent, &input);
+}
+
 std::optional<bool> confirmRemove(QWidget *parent,
                                     const QString &title,
                                     const QString &text,

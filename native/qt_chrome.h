@@ -156,6 +156,32 @@ typedef struct i2p_files_in {
 
 void i2p_files_exec(void *parent, const i2p_files_in *in, i2p_file_change_cb cb, void *ctx);
 
+typedef struct i2p_peer_row {
+    const char *address;
+    const char *address_tip;
+    const char *client;
+    const char *rate_down;
+    const char *rate_up;
+    const char *flags;
+} i2p_peer_row;
+
+typedef struct i2p_peers_in {
+    const char *stylesheet;
+    const char *title;
+    const char *note;
+    const char *empty;
+    const char *close;
+    const char *col_address;
+    const char *col_client;
+    const char *col_down;
+    const char *col_up;
+    const char *col_flags;
+    const i2p_peer_row *peers;
+    int peer_count;
+} i2p_peers_in;
+
+void i2p_peers_exec(void *parent, const i2p_peers_in *in);
+
 int i2p_confirm_remove(void *parent, const char *title, const char *text,
                        const char *checkbox, const char *yes_label,
                        const char *cancel_label, int *delete_data);

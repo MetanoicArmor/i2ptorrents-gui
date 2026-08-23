@@ -16,6 +16,7 @@
 #include <QAction>
 #include <QApplication>
 #include <QCheckBox>
+#include <QClipboard>
 #include <QColor>
 #include <QComboBox>
 #include <QCursor>
@@ -2872,7 +2873,8 @@ protected:
         }
         for (QWidget *cur = widget->childAt(mouse->pos()); cur != nullptr && cur != widget;
              cur = cur->parentWidget()) {
-            if (cur->objectName() == QLatin1String("MoreButton")) {
+            const QString name = cur->objectName();
+            if (name == QLatin1String("MoreButton") || name == QLatin1String("PeersLink")) {
                 return false;
             }
         }
@@ -2884,6 +2886,7 @@ protected:
                     cb(ctx);
                 }
             });
+            return true;
         }
         return false;
     }
@@ -4364,6 +4367,210 @@ void i2p_files_exec(void *parent, const i2p_files_in *in, i2p_file_change_cb cb,
             if (files_table != nullptr) {
                 layout_files_table(files_table, layout, DialogMetrics::kFilesW, DialogMetrics::kFilesH, note,
                                    dialog_buttons_row_height(close), qstr(in->col_progress));
+            }
+            layout->activate();
+            const int height = std::min(DialogMetrics::kFilesH, dialog.sizeHint().height());
+            dialog.setFixedSize(DialogMetrics::kFilesW, std::max(height, 160));
+        });
+    if (g_tip) {
+        g_tip->forceHide();
+    }
+}
+
+void layout_peers_table(QTableWidget *table, QVBoxLayout *layout, int dialog_w, int dialog_h, QLabel *note,
+                        int button_row_h) {
+    if (table == nullptr || layout == nullptr || note == nullptr) {
+        return;
+    }
+    const QMargins margins = layout->contentsMargins();
+    const int inner_w = DialogMetrics::inner_w(dialog_w, margins);
+    const int spacing = layout->spacing();
+
+    note->setFixedWidth(inner_w);
+    int note_h = note->heightForWidth(inner_w);
+    if (note_h <= 0) {
+        note_h = wrapped_label_height(note, inner_w);
+    }
+    if (note_h > 0) {
+        note->setFixedHeight(note_h);
+    }
+
+    const int chrome_h = margins.top() + margins.bottom() + note_h + button_row_h + spacing * 2;
+    const int max_dialog_h = dialog_h > 0 ? dialog_h : DialogMetrics::kFilesH;
+    const int max_table_h = std::max(120, max_dialog_h - chrome_h);
+
+    QHeaderView *header = table->horizontalHeader();
+    header->setFixedHeight(std::max(DialogMetrics::kFilesHeaderMinH, header->sizeHint().height()));
+    const int header_h = header->height();
+
+    const int table_inner =
+        std::max(80, inner_w - DialogMetrics::kFilesTableEdge * 2);
+    const QFontMetrics metrics(table->font());
+
+    table->resizeColumnToContents(1);
+    const int col_client = std::max(table->columnWidth(1), metrics.horizontalAdvance(QStringLiteral("I2PSnark"))) + 12;
+    table->resizeColumnToContents(4);
+    const int col_flags = std::max(table->columnWidth(4), metrics.horizontalAdvance(QStringLiteral("IDU?"))) + 12;
+    table->resizeColumnToContents(2);
+    const int col_down = std::max(table->columnWidth(2), metrics.horizontalAdvance(QStringLiteral("999 KB/s"))) + 12;
+    table->resizeColumnToContents(3);
+    const int col_up = std::max(table->columnWidth(3), metrics.horizontalAdvance(QStringLiteral("999 KB/s"))) + 12;
+
+    table->setColumnWidth(1, col_client);
+    table->setColumnWidth(2, col_down);
+    table->setColumnWidth(3, col_up);
+    table->setColumnWidth(4, col_flags);
+
+#ifndef Q_OS_WIN
+    const int scrollbar_w = table->style()->pixelMetric(QStyle::PM_ScrollBarExtent, nullptr, table);
+    const int address_w =
+        std::max(80, table_inner - col_client - col_down - col_up - col_flags - scrollbar_w);
+    table->setColumnWidth(0, address_w);
+#endif
+
+    int rows_h = 0;
+    for (int row = 0; row < table->rowCount(); ++row) {
+        rows_h += table->rowHeight(row);
+    }
+
+    const int content_table_h = header_h + rows_h + DialogMetrics::kFilesTableEdge * 2;
+    const bool need_scroll = content_table_h > max_table_h;
+    const int table_h = need_scroll ? max_table_h : content_table_h;
+    table->setFixedSize(inner_w, table_h);
+    table->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    table->setMaximumHeight(table_h);
+    if (QWidget *parent = table->parentWidget()) {
+        if (parent->objectName() == QLatin1String("FilesTablePane") ||
+            parent->objectName() == QLatin1String("PeersTablePane")) {
+            parent->setFixedSize(inner_w, table_h);
+            parent->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+            static_cast<FilesTablePane *>(parent)->applyClip();
+        }
+    }
+    table->setVerticalScrollBarPolicy(need_scroll ? Qt::ScrollBarAsNeeded : Qt::ScrollBarAlwaysOff);
+#ifdef Q_OS_WIN
+    table->horizontalHeader()->setStretchLastSection(false);
+    table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+#else
+    if (need_scroll) {
+        table->setColumnWidth(0, std::max(80, table_inner - col_client - col_down - col_up - col_flags - scrollbar_w));
+    }
+#endif
+}
+
+void i2p_peers_exec(void *parent, const i2p_peers_in *in) {
+    if (in == nullptr) {
+        return;
+    }
+    QWidget *host = as_widget(parent);
+    QDialog dialog(nullptr, hosted_dialog_flags());
+    prepare_hosted_dialog(&dialog);
+#ifdef Q_OS_MAC
+    dialog.setProperty("i2pOpaqueChrome", true);
+#endif
+    dialog.setWindowTitle(qstr(in->title));
+    dialog.setFixedWidth(DialogMetrics::kFilesW);
+    if (in->stylesheet && in->stylesheet[0] != '\0') {
+        dialog.setStyleSheet(qstr(in->stylesheet));
+    }
+    const bool night = stylesheet_is_night(dialog.styleSheet());
+#ifdef Q_OS_MAC
+    dialog.setStyleSheet(dialog.styleSheet() +
+                         (night ? QStringLiteral("\nQDialog { background: #1c1c1e; }")
+                                : QStringLiteral("\nQDialog { background: #ffffff; }")));
+#endif
+    const QMargins margins = DialogMetrics::dialog_margins(16, 16);
+    const int inner_w = DialogMetrics::inner_w(DialogMetrics::kFilesW, margins);
+    auto *layout = new QVBoxLayout(&dialog);
+    layout->setContentsMargins(margins);
+    layout->setSpacing(10);
+    layout->setSizeConstraint(QLayout::SetFixedSize);
+
+    auto *note = new QLabel(qstr(in->note), &dialog);
+    note->setObjectName(QStringLiteral("Secondary"));
+    note->setWordWrap(true);
+    layout->addWidget(note);
+
+    QTableWidget *peers_table = nullptr;
+    std::vector<QString> copy_texts;
+
+    if (in->peer_count <= 0) {
+        auto *empty = new QLabel(qstr(in->empty), &dialog);
+        empty->setObjectName(QStringLiteral("Secondary"));
+        empty->setWordWrap(true);
+        layout->addWidget(empty);
+    } else {
+        auto *pane = new FilesTablePane(&dialog, night);
+        pane->setObjectName(QStringLiteral("PeersTablePane"));
+        auto *pane_layout = new QVBoxLayout(pane);
+        pane_layout->setContentsMargins(0, 0, 0, 0);
+        pane_layout->setSpacing(0);
+
+        auto *table = new QTableWidget(in->peer_count, 5, pane);
+        table->setObjectName(QStringLiteral("PeersTable"));
+        style_files_table(table, &dialog);
+        table->setHorizontalHeaderLabels({qstr(in->col_address), qstr(in->col_client), qstr(in->col_down),
+                                          qstr(in->col_up), qstr(in->col_flags)});
+        table->verticalHeader()->setVisible(false);
+        table->setShowGrid(false);
+        table->setSelectionMode(QAbstractItemView::NoSelection);
+        table->setFocusPolicy(Qt::NoFocus);
+        table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+        table->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        table->horizontalHeader()->setMinimumSectionSize(28);
+        table->horizontalHeader()->setStretchLastSection(false);
+        for (int column = 0; column < 5; ++column) {
+            table->horizontalHeader()->setSectionResizeMode(column, QHeaderView::Fixed);
+        }
+
+        copy_texts.reserve(static_cast<size_t>(in->peer_count));
+        for (int row = 0; row < in->peer_count; ++row) {
+            const i2p_peer_row &peer = in->peers[row];
+            const QString address = qstr(peer.address);
+            const QString tip = qstr(peer.address_tip);
+            copy_texts.push_back(tip.isEmpty() ? address : tip);
+
+            auto *address_item = new QTableWidgetItem(address);
+            address_item->setToolTip(tip.isEmpty() ? address : tip);
+            table->setItem(row, 0, address_item);
+            table->setItem(row, 1, new QTableWidgetItem(qstr(peer.client)));
+            table->setItem(row, 2, new QTableWidgetItem(qstr(peer.rate_down)));
+            table->setItem(row, 3, new QTableWidgetItem(qstr(peer.rate_up)));
+            table->setItem(row, 4, new QTableWidgetItem(qstr(peer.flags)));
+        }
+
+        QObject::connect(table, &QTableWidget::cellDoubleClicked, &dialog,
+                         [table, texts = copy_texts](int row, int column) {
+                             if (column != 0 || row < 0 || row >= static_cast<int>(texts.size())) {
+                                 return;
+                             }
+                             if (QClipboard *clipboard = QApplication::clipboard()) {
+                                 clipboard->setText(texts[static_cast<size_t>(row)]);
+                             }
+                         });
+
+        peers_table = table;
+        pane_layout->addWidget(table);
+        layout->addWidget(pane);
+    }
+
+    auto *close = new QPushButton(qstr(in->close), &dialog);
+    close->setObjectName(QStringLiteral("Primary"));
+    close->setDefault(true);
+    QObject::connect(close, &QPushButton::clicked, &dialog, [&dialog] {
+        if (g_tip) {
+            g_tip->forceHide();
+        }
+        QTimer::singleShot(0, &dialog, &QDialog::accept);
+    });
+    add_dialog_buttons(layout, {close});
+
+    exec_app_modal_dialog(
+        &dialog, host, inner_w, QSize(DialogMetrics::kFilesW, 0),
+        [&] {
+            if (peers_table != nullptr) {
+                layout_peers_table(peers_table, layout, DialogMetrics::kFilesW, DialogMetrics::kFilesH, note,
+                                   dialog_buttons_row_height(close));
             }
             layout->activate();
             const int height = std::min(DialogMetrics::kFilesH, dialog.sizeHint().height());

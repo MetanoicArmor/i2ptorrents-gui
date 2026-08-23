@@ -16,13 +16,15 @@ namespace i2p {
 inline const char *RPC_FIELDS[] = {
     "id",           "name",           "status",         "isFinished",      "sizeWhenDone",
     "leftUntilDone", "rateDownload",  "rateUpload",     "peersGettingFromUs", "peersSendingToUs",
-    "pieceCount",   "pieceSize",      "totalSize",      "hashString",      "pieces",
+    "peers",        "pieceCount",     "pieceSize",      "totalSize",       "hashString",      "pieces",
 };
 
 inline const char *RPC_FILE_FIELDS[] = {"id", "files", "wanted", "priorities"};
+inline const char *RPC_PEER_FIELDS[] = {"id", "peers"};
 
-constexpr int RPC_FIELD_COUNT = 15;
+constexpr int RPC_FIELD_COUNT = 16;
 constexpr int RPC_FILE_FIELD_COUNT = 4;
+constexpr int RPC_PEER_FIELD_COUNT = 2;
 
 std::optional<QString> normalizeRpcUrl(const QString &value, QString *error = nullptr);
 bool rpcMethodUnsupported(const QString &message);
@@ -41,6 +43,7 @@ public:
     QJsonValue call(const QString &method, const QJsonObject &arguments, QString *error = nullptr);
     QVector<Torrent> getTorrents(bool detailed, QString *error = nullptr);
     QVector<TorrentFile> getTorrentFiles(qint64 torrentId, QString *error = nullptr);
+    QVector<Peer> getTorrentPeers(qint64 torrentId, QString *error = nullptr);
     QJsonObject addTorrentBytes(const QByteArray &content, QString *error = nullptr);
     QJsonObject addTorrentPath(const QString &path, QString *error = nullptr);
     bool removeTorrent(qint64 torrentId, bool deleteData, QString *error = nullptr);

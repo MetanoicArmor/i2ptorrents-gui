@@ -426,7 +426,12 @@ QWidget *MainWindow::makeCard(const Torrent &torrent)
                                     {{QStringLiteral("down"), QString::number(torrent.peersSendingToUs)},
                                      {QStringLiteral("up"), QString::number(torrent.peersGettingFromUs)}}),
                              details);
-    peers->setObjectName(QStringLiteral("Secondary"));
+    peers->setObjectName(QStringLiteral("PeersLink"));
+    peers->setToolTip(trKey(QStringLiteral("peers_tooltip")));
+    setCursorPtr(reinterpret_cast<quintptr>(peers), static_cast<int>(Qt::PointingHandCursor));
+    onClick(peers, [this, torrentId, torrentName]() {
+        defer([this, torrentId, torrentName]() { showPeers(torrentId, torrentName); });
+    });
     detailRow->addWidget(peers);
     root->addWidget(details);
 
@@ -460,6 +465,9 @@ void MainWindow::showActions(const Torrent &torrent, quintptr morePtr)
     showPopupBelow(this, morePtr, settings_.theme, [this, torrent](void *popup) {
         popupAddAction(popup, trKey(QStringLiteral("files_show")), true, [this, torrent]() {
             defer([this, torrent]() { showFiles(torrent.id, torrent.name); });
+        });
+        popupAddAction(popup, trKey(QStringLiteral("peers_show")), true, [this, torrent]() {
+            defer([this, torrent]() { showPeers(torrent.id, torrent.name); });
         });
         popupAddAction(popup,
                          trKey(QStringLiteral("copy_hash")),
@@ -503,6 +511,23 @@ void MainWindow::showFiles(qint64 torrentId, const QString &name)
                   }
                   return 0;
               });
+}
+
+void MainWindow::showPeers(qint64 torrentId, const QString &name)
+{
+    QString error;
+    std::optional<QString> endpoint = normalizeRpcUrl(settings_.rpcUrl, &error);
+    QVector<Peer> peers;
+    if (endpoint.has_value()) {
+        RpcClient client(*endpoint);
+        peers = client.getTorrentPeers(torrentId, &error);
+    }
+    const QString title = trArgs(QStringLiteral("peers_title"), {{QStringLiteral("name"), name}});
+    if (!error.isEmpty() && peers.isEmpty()) {
+        QMessageBox::warning(this, title, error);
+        return;
+    }
+    peersExec(this, stylesheet(settings_.theme), title, peers);
 }
 
 void MainWindow::confirmRemoveTorrent(qint64 torrentId, const QString &name)

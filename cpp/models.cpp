@@ -131,6 +131,116 @@ QString TorrentFile::progressLabel() const
     return QStringLiteral("%1%").arg(percent, 0, 'f', 0);
 }
 
+QString Peer::displayAddress() const
+{
+    if (!address.isEmpty()) {
+        return address;
+    }
+    if (!identHash.isEmpty()) {
+        return identHash.left(8);
+    }
+    return QStringLiteral("—");
+}
+
+QString Peer::tooltipAddress() const
+{
+    if (!identHash.isEmpty()) {
+        return identHash;
+    }
+    return address;
+}
+
+QString Peer::ratesDownLabel() const
+{
+    return formatRate(rateToClient);
+}
+
+QString Peer::ratesUpLabel() const
+{
+    return formatRate(rateToPeer);
+}
+
+namespace {
+
+bool jsonBoolField(const QJsonObject &obj, std::initializer_list<const char *> keys)
+{
+    for (const char *key : keys) {
+        if (obj.contains(key)) {
+            return jsonTruthy(obj.value(key)).value_or(false);
+        }
+    }
+    return false;
+}
+
+std::optional<Peer> peerFromRpc(const QJsonValue &data)
+{
+    if (!data.isObject()) {
+        return std::nullopt;
+    }
+    const QJsonObject obj = data.toObject();
+    Peer peer;
+    peer.address = jsonString(valueOf(obj, "address", "address")).trimmed();
+    peer.identHash = jsonString(valueOf(obj, "identHash", "ident_hash")).trimmed();
+    peer.clientName = jsonString(valueOf(obj, "clientName", "client_name")).trimmed();
+    if (peer.clientName.isEmpty()) {
+        peer.clientName = QStringLiteral("Unknown");
+    }
+    peer.rateToClient = jsonUInt64(valueOf(obj, "rateToClient", "rate_to_client")).value_or(0);
+    peer.rateToPeer = jsonUInt64(valueOf(obj, "rateToPeer", "rate_to_peer")).value_or(0);
+    peer.flagStr = jsonString(valueOf(obj, "flagStr", "flag_str")).trimmed();
+    peer.isIncoming = jsonBoolField(obj, {"isIncoming", "is_incoming"});
+    peer.isDownloadingFrom = jsonBoolField(obj, {"isDowloadingFrom", "isDownloadingFrom", "is_downloading_from"});
+    peer.isUploadingTo = jsonBoolField(obj, {"isUploading_to", "isUploadingTo", "is_uploading_to"});
+    return peer;
+}
+
+} // namespace
+
+QVector<Peer> parseTorrentPeers(const QJsonObject &obj)
+{
+    const QJsonValue peersValue = valueOf(obj, "peers", "peers");
+    if (!peersValue.isArray()) {
+        return {};
+    }
+    QVector<Peer> peers;
+    for (const QJsonValue &item : peersValue.toArray()) {
+        if (const std::optional<Peer> peer = peerFromRpc(item)) {
+            peers.push_back(*peer);
+        }
+    }
+    return peers;
+}
+
+void syncPeerCounts(Torrent &torrent, const QJsonObject &obj)
+{
+    const QVector<Peer> peers = parseTorrentPeers(obj);
+    if (peers.isEmpty()) {
+        return;
+    }
+    if (torrent.peersSendingToUs == 0) {
+        quint64 count = 0;
+        for (const Peer &peer : peers) {
+            if (peer.isDownloadingFrom) {
+                ++count;
+            }
+        }
+        if (count > 0) {
+            torrent.peersSendingToUs = count;
+        }
+    }
+    if (torrent.peersGettingFromUs == 0) {
+        quint64 count = 0;
+        for (const Peer &peer : peers) {
+            if (peer.isUploadingTo) {
+                ++count;
+            }
+        }
+        if (count > 0) {
+            torrent.peersGettingFromUs = count;
+        }
+    }
+}
+
 quint64 Torrent::completed() const
 {
     return totalSize >= leftUntilDone ? totalSize - leftUntilDone : 0;
@@ -325,6 +435,7 @@ std::optional<Torrent> torrentFromRpc(const QJsonValue &data)
         torrent.pieceCount,
         torrent.finished);
     torrent.files = parseTorrentFiles(obj);
+    syncPeerCounts(torrent, obj);
     return torrent;
 }
 
