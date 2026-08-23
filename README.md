@@ -190,7 +190,7 @@ Release package:
 
 Result: `dist\I2PTorrents\I2PTorrents.exe` and `I2PTorrents-windows-<arch>-v<version>.zip`. Requires Qt 6 and Visual Studio C++ build tools.
 
-Rust and Qt 6 and CMake are required. The release version comes from the `VERSION` file.
+C++17, Qt 6, and CMake are required. The release version comes from the `VERSION` file.
 
 ### i2pd RPC limits
 
@@ -366,7 +366,7 @@ cmake --build build --config Release
 
 Результат: `dist\I2PTorrents\I2PTorrents.exe` и `I2PTorrents-windows-<arch>-v<version>.zip`. Нужны Qt 6 и Visual Studio C++ build tools.
 
-Нужны Qt 6 и CMake. Версия релиза берётся из файла `VERSION`.
+Нужны C++17, Qt 6 и CMake. Версия релиза берётся из файла `VERSION`.
 
 ### Ограничения i2pd RPC
 
