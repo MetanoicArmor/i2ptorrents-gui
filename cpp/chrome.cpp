@@ -426,7 +426,7 @@ void peersExec(QWidget *parent,
     rows.reserve(peers.size());
     for (const Peer &peer : peers) {
         addresses.push_back(toUtf8(peer.displayAddress()));
-        tips.push_back(toUtf8(peer.tooltipAddress()));
+        tips.push_back(toUtf8(peer.clipboardText()));
         clients.push_back(toUtf8(peer.clientName));
         downs.push_back(toUtf8(peer.ratesDownLabel()));
         ups.push_back(toUtf8(peer.ratesUpLabel()));

@@ -56,7 +56,7 @@
   "peers": "Пиры: {down}↓ {up}↑",
   "peers_show": "Показать пиров",
   "peers_title": "Пиры — {name}",
-  "peers_note": "Адреса пиров — это I2P destination hash, а не IP. Двойной клик по адресу копирует полный hash.",
+  "peers_note": "Двойной клик по ident hash копирует его.",
   "peers_empty": "Нет подключённых пиров.",
   "peers_address": "Адрес",
   "peers_client": "Клиент",

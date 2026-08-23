@@ -12,6 +12,7 @@ private slots:
     void torrentParsesSnakeCaseFields();
     void torrentParsesFilesWantedPriorities();
     void torrentParsesPeers();
+    void peerIdentHashDisplayAndClipboard();
     void syncPeerCountsUsesPeersArrayWhenAggregatesZero();
     void decodePieceBitfieldMsbFirst();
     void finishedTorrentWithoutBitfieldIsComplete();
@@ -73,13 +74,15 @@ void ModelsTests::torrentParsesFilesWantedPriorities()
 
 void ModelsTests::torrentParsesPeers()
 {
+    const QString fullIdentHash =
+        QStringLiteral("HUK-AbCd1234~EfGh5678-IjKl9012~MnOp3456-Q=");
     const QJsonObject obj{
         {QStringLiteral("id"), 3},
         {QStringLiteral("peers"),
          QJsonArray{
              QJsonObject{
-                 {QStringLiteral("address"), QStringLiteral("abcd")},
-                 {QStringLiteral("identHash"), QStringLiteral("abcdEFGH1234")},
+                 {QStringLiteral("address"), QStringLiteral("HUK-")},
+                 {QStringLiteral("identHash"), fullIdentHash},
                  {QStringLiteral("clientName"), QStringLiteral("i2pd")},
                  {QStringLiteral("rateToClient"), 1024},
                  {QStringLiteral("rateToPeer"), 512},
@@ -100,16 +103,33 @@ void ModelsTests::torrentParsesPeers()
     };
     const QVector<i2p::Peer> peers = i2p::parseTorrentPeers(obj);
     QCOMPARE(peers.size(), 2);
-    QCOMPARE(peers[0].displayAddress(), QStringLiteral("abcd"));
-    QCOMPARE(peers[0].tooltipAddress(), QStringLiteral("abcdEFGH1234"));
+    QCOMPARE(peers[0].displayAddress(), fullIdentHash);
+    QCOMPARE(peers[0].clipboardText(), fullIdentHash);
+    QCOMPARE(peers[0].tooltipAddress(), fullIdentHash);
     QCOMPARE(peers[0].clientName, QStringLiteral("i2pd"));
     QCOMPARE(peers[0].flagStr, QStringLiteral("IDU"));
     QVERIFY(peers[0].isIncoming);
     QVERIFY(peers[0].isDownloadingFrom);
     QVERIFY(!peers[0].isUploadingTo);
     QCOMPARE(peers[1].displayAddress(), QStringLiteral("wxyz"));
-    QCOMPARE(peers[1].tooltipAddress(), QStringLiteral("wxyz"));
+    QCOMPARE(peers[1].clipboardText(), QStringLiteral("wxyz"));
     QVERIFY(peers[1].isUploadingTo);
+}
+
+void ModelsTests::peerIdentHashDisplayAndClipboard()
+{
+    const QString fullIdentHash =
+        QStringLiteral("HUK-AbCd1234~EfGh5678-IjKl9012~MnOp3456-Q=");
+    i2p::Peer peer;
+    peer.identHash = fullIdentHash;
+    QCOMPARE(peer.displayAddress(), fullIdentHash);
+    QCOMPARE(peer.clipboardText(), fullIdentHash);
+
+    i2p::Peer withAddress;
+    withAddress.address = QStringLiteral("HUK-");
+    withAddress.identHash = fullIdentHash;
+    QCOMPARE(withAddress.displayAddress(), fullIdentHash);
+    QCOMPARE(withAddress.clipboardText(), fullIdentHash);
 }
 
 void ModelsTests::syncPeerCountsUsesPeersArrayWhenAggregatesZero()

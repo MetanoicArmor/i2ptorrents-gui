@@ -56,7 +56,7 @@
   "peers": "Peers: {down}↓ {up}↑",
   "peers_show": "Show peers",
   "peers_title": "Peers — {name}",
-  "peers_note": "Peer addresses are I2P destination hashes, not IP addresses. Double-click an address to copy the full hash.",
+  "peers_note": "Double-click an ident hash to copy it.",
   "peers_empty": "No connected peers.",
   "peers_address": "Address",
   "peers_client": "Client",

@@ -133,16 +133,19 @@ QString TorrentFile::progressLabel() const
 
 QString Peer::displayAddress() const
 {
-    if (!address.isEmpty()) {
-        return address;
-    }
-    if (!identHash.isEmpty()) {
-        return identHash.left(8);
+    const QString full = clipboardText();
+    if (!full.isEmpty()) {
+        return full;
     }
     return QStringLiteral("—");
 }
 
 QString Peer::tooltipAddress() const
+{
+    return clipboardText();
+}
+
+QString Peer::clipboardText() const
 {
     if (!identHash.isEmpty()) {
         return identHash;

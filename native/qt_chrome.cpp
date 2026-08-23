@@ -426,6 +426,8 @@ struct DialogMetrics {
     static constexpr int kSettingsW = 520;
     static constexpr int kSettingsH = 520;
     static constexpr int kFilesW = 640;
+    static constexpr int kPeersW = 640;
+    static constexpr int kPeersMaxW = 960;
     static constexpr int kFilesH = 460;
     static constexpr int kButtonRowTop = 8;
     static constexpr int kButtonGap = 8;
@@ -2119,6 +2121,20 @@ private:
     static constexpr int pad_y_ = 8;
 };
 
+class PeersItemDelegate final : public QStyledItemDelegate {
+public:
+    explicit PeersItemDelegate(QObject *parent = nullptr) : QStyledItemDelegate(parent) {}
+
+protected:
+    void initStyleOption(QStyleOptionViewItem *option, const QModelIndex &index) const override {
+        QStyledItemDelegate::initStyleOption(option, index);
+        option->rect.adjust(8, 0, -8, 0);
+        option->state &= ~QStyle::State_HasFocus;
+        option->backgroundBrush = Qt::NoBrush;
+        option->textElideMode = Qt::ElideNone;
+    }
+};
+
 class FilesItemDelegate final : public QStyledItemDelegate {
 public:
     explicit FilesItemDelegate(QObject *parent = nullptr) : QStyledItemDelegate(parent) {}
@@ -2705,6 +2721,15 @@ void style_files_table(QTableWidget *table, const QWidget *host) {
     table->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     table->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
 #endif
+}
+
+void style_peers_table(QTableWidget *table, const QWidget *host) {
+    style_files_table(table, host);
+    if (table == nullptr) {
+        return;
+    }
+    table->setItemDelegate(new PeersItemDelegate(table));
+    table->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
 }
 
 void layout_files_table(QTableWidget *table, QVBoxLayout *layout, int dialog_w, int dialog_h, QLabel *note,
@@ -3348,6 +3373,53 @@ RoundedTooltipWindow *ensure_tip() {
     return g_tip;
 }
 
+class TableItemTooltipFilter final : public QObject {
+public:
+    explicit TableItemTooltipFilter(QTableWidget *table) : QObject(table), table_(table) {
+        if (table_ != nullptr && table_->viewport() != nullptr) {
+            table_->viewport()->installEventFilter(this);
+            table_->viewport()->setMouseTracking(true);
+        }
+    }
+
+protected:
+    bool eventFilter(QObject *obj, QEvent *event) override {
+        if (table_ == nullptr || table_->viewport() != obj || event->type() != QEvent::ToolTip) {
+            return false;
+        }
+        auto *help = static_cast<QHelpEvent *>(event);
+        const QModelIndex index = table_->indexAt(help->pos());
+        if (!index.isValid()) {
+            ensure_tip()->forceHide();
+            return true;
+        }
+        QTableWidgetItem *item = table_->item(index.row(), index.column());
+        if (item == nullptr) {
+            ensure_tip()->forceHide();
+            return true;
+        }
+        const QString visible = item->text().trimmed();
+        QString tip = item->toolTip().trimmed();
+        if (tip.isEmpty()) {
+            tip = visible;
+        }
+        const QFontMetrics metrics(table_->fontMetrics());
+        const int col_w = table_->columnWidth(index.column());
+        constexpr int cell_pad = 16;
+        const bool truncated = metrics.horizontalAdvance(visible) > std::max(0, col_w - cell_pad);
+        const bool address_hash = index.column() == 0 && !tip.isEmpty() && tip != visible;
+        if (tip.isEmpty() || (!address_hash && !truncated && tip == visible)) {
+            ensure_tip()->forceHide();
+            return true;
+        }
+        ensure_tip()->present(help->globalPos(), tip, -1, table_->viewport());
+        return true;
+    }
+
+private:
+    QTableWidget *table_ = nullptr;
+};
+
 bool cursor_over_owner_or_tip(QWidget *owner) {
     const QPoint global_pos = QCursor::pos();
     if (g_tip != nullptr && g_tip->isVisible() && g_tip->containsGlobalPoint(global_pos)) {
@@ -3381,6 +3453,13 @@ protected:
             auto *help = static_cast<QHelpEvent *>(event);
             auto *widget = qobject_cast<QWidget *>(obj);
             if (widget) {
+                if (QWidget *parent = widget->parentWidget()) {
+                    if (auto *view = qobject_cast<QAbstractItemView *>(parent)) {
+                        if (view->viewport() == widget) {
+                            return false;
+                        }
+                    }
+                }
                 const QString tip = widget->toolTip().trimmed();
                 if (!tip.isEmpty()) {
                     ensure_tip()->present(help->globalPos(), tip, -1, widget);
@@ -4377,10 +4456,24 @@ void i2p_files_exec(void *parent, const i2p_files_in *in, i2p_file_change_cb cb,
     }
 }
 
-void layout_peers_table(QTableWidget *table, QVBoxLayout *layout, int dialog_w, int dialog_h, QLabel *note,
-                        int button_row_h) {
+static int peers_table_content_width(QTableWidget *table, int column, const QFontMetrics &metrics,
+                                     const QString &floor_sample, int pad) {
+    int width = metrics.horizontalAdvance(floor_sample);
+    if (table->horizontalHeaderItem(column) != nullptr) {
+        width = std::max(width, metrics.horizontalAdvance(table->horizontalHeaderItem(column)->text()));
+    }
+    for (int row = 0; row < table->rowCount(); ++row) {
+        if (QTableWidgetItem *item = table->item(row, column)) {
+            width = std::max(width, metrics.horizontalAdvance(item->text()));
+        }
+    }
+    return width + pad;
+}
+
+int layout_peers_table(QTableWidget *table, QVBoxLayout *layout, int dialog_w, int dialog_h, QLabel *note,
+                       int button_row_h) {
     if (table == nullptr || layout == nullptr || note == nullptr) {
-        return;
+        return dialog_w > 0 ? dialog_w : DialogMetrics::kPeersW;
     }
     const QMargins margins = layout->contentsMargins();
     const int inner_w = DialogMetrics::inner_w(dialog_w, margins);
@@ -4400,32 +4493,37 @@ void layout_peers_table(QTableWidget *table, QVBoxLayout *layout, int dialog_w, 
     const int max_table_h = std::max(120, max_dialog_h - chrome_h);
 
     QHeaderView *header = table->horizontalHeader();
+    header->setHighlightSections(false);
     header->setFixedHeight(std::max(DialogMetrics::kFilesHeaderMinH, header->sizeHint().height()));
     const int header_h = header->height();
 
     const int table_inner =
         std::max(80, inner_w - DialogMetrics::kFilesTableEdge * 2);
-    const QFontMetrics metrics(table->font());
+    const QFont hash_font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+    const QFontMetrics hash_metrics(hash_font);
+    const QFontMetrics metrics(table->fontMetrics());
+    constexpr int cell_pad = 16;
 
-    table->resizeColumnToContents(1);
-    const int col_client = std::max(table->columnWidth(1), metrics.horizontalAdvance(QStringLiteral("I2PSnark"))) + 12;
-    table->resizeColumnToContents(4);
-    const int col_flags = std::max(table->columnWidth(4), metrics.horizontalAdvance(QStringLiteral("IDU?"))) + 12;
-    table->resizeColumnToContents(2);
-    const int col_down = std::max(table->columnWidth(2), metrics.horizontalAdvance(QStringLiteral("999 KB/s"))) + 12;
-    table->resizeColumnToContents(3);
-    const int col_up = std::max(table->columnWidth(3), metrics.horizontalAdvance(QStringLiteral("999 KB/s"))) + 12;
+    int col_address = peers_table_content_width(table, 0, hash_metrics,
+                                                QStringLiteral("HUK-AbCd1234~EfGh5678-IjKl9012"), cell_pad);
+    int col_client =
+        peers_table_content_width(table, 1, metrics, QStringLiteral("BiglyBT"), cell_pad);
+    int col_down =
+        peers_table_content_width(table, 2, metrics, QStringLiteral("999.9 KiB/s"), cell_pad);
+    int col_up =
+        peers_table_content_width(table, 3, metrics, QStringLiteral("999.9 KiB/s"), cell_pad);
+    int col_flags =
+        peers_table_content_width(table, 4, metrics, QStringLiteral("IDU?"), cell_pad);
+    col_down = std::max(col_down, 96);
+    col_up = std::max(col_up, 96);
+    col_flags = std::max(col_flags, 40);
 
-    table->setColumnWidth(1, col_client);
-    table->setColumnWidth(2, col_down);
-    table->setColumnWidth(3, col_up);
-    table->setColumnWidth(4, col_flags);
+    const int content_w = col_address + col_client + col_down + col_up + col_flags;
 
 #ifndef Q_OS_WIN
-    const int scrollbar_w = table->style()->pixelMetric(QStyle::PM_ScrollBarExtent, nullptr, table);
-    const int address_w =
-        std::max(80, table_inner - col_client - col_down - col_up - col_flags - scrollbar_w);
-    table->setColumnWidth(0, address_w);
+    const int v_scrollbar_w = table->style()->pixelMetric(QStyle::PM_ScrollBarExtent, nullptr, table);
+#else
+    const int v_scrollbar_w = 0;
 #endif
 
     int rows_h = 0;
@@ -4434,11 +4532,29 @@ void layout_peers_table(QTableWidget *table, QVBoxLayout *layout, int dialog_w, 
     }
 
     const int content_table_h = header_h + rows_h + DialogMetrics::kFilesTableEdge * 2;
-    const bool need_scroll = content_table_h > max_table_h;
-    const int table_h = need_scroll ? max_table_h : content_table_h;
+    const bool need_v_scroll = content_table_h > max_table_h;
+    const int v_scroll_reserve = need_v_scroll ? v_scrollbar_w : 0;
+    const int viewport_w = table_inner - v_scroll_reserve;
+    const bool need_h_scroll = content_w > viewport_w;
+
+    if (!need_h_scroll) {
+        const int slack = viewport_w - content_w;
+        col_down += slack / 2;
+        col_up += slack - slack / 2;
+    }
+
+    table->setColumnWidth(0, col_address);
+    table->setColumnWidth(1, col_client);
+    table->setColumnWidth(2, col_down);
+    table->setColumnWidth(3, col_up);
+    table->setColumnWidth(4, col_flags);
+
+    const int table_h = need_v_scroll ? max_table_h : content_table_h;
     table->setFixedSize(inner_w, table_h);
     table->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     table->setMaximumHeight(table_h);
+    table->setHorizontalScrollBarPolicy(need_h_scroll ? Qt::ScrollBarAsNeeded : Qt::ScrollBarAlwaysOff);
+    table->setVerticalScrollBarPolicy(need_v_scroll ? Qt::ScrollBarAsNeeded : Qt::ScrollBarAlwaysOff);
     if (QWidget *parent = table->parentWidget()) {
         if (parent->objectName() == QLatin1String("FilesTablePane") ||
             parent->objectName() == QLatin1String("PeersTablePane")) {
@@ -4447,15 +4563,10 @@ void layout_peers_table(QTableWidget *table, QVBoxLayout *layout, int dialog_w, 
             static_cast<FilesTablePane *>(parent)->applyClip();
         }
     }
-    table->setVerticalScrollBarPolicy(need_scroll ? Qt::ScrollBarAsNeeded : Qt::ScrollBarAlwaysOff);
-#ifdef Q_OS_WIN
-    table->horizontalHeader()->setStretchLastSection(false);
-    table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
-#else
-    if (need_scroll) {
-        table->setColumnWidth(0, std::max(80, table_inner - col_client - col_down - col_up - col_flags - scrollbar_w));
-    }
-#endif
+
+    const int preferred_dialog_w = std::clamp(content_w + margins.left() + margins.right() + v_scroll_reserve,
+                                              DialogMetrics::kPeersW, DialogMetrics::kPeersMaxW);
+    return preferred_dialog_w;
 }
 
 void i2p_peers_exec(void *parent, const i2p_peers_in *in) {
@@ -4469,7 +4580,7 @@ void i2p_peers_exec(void *parent, const i2p_peers_in *in) {
     dialog.setProperty("i2pOpaqueChrome", true);
 #endif
     dialog.setWindowTitle(qstr(in->title));
-    dialog.setFixedWidth(DialogMetrics::kFilesW);
+    dialog.setFixedWidth(DialogMetrics::kPeersW);
     if (in->stylesheet && in->stylesheet[0] != '\0') {
         dialog.setStyleSheet(qstr(in->stylesheet));
     }
@@ -4480,7 +4591,7 @@ void i2p_peers_exec(void *parent, const i2p_peers_in *in) {
                                 : QStringLiteral("\nQDialog { background: #ffffff; }")));
 #endif
     const QMargins margins = DialogMetrics::dialog_margins(16, 16);
-    const int inner_w = DialogMetrics::inner_w(DialogMetrics::kFilesW, margins);
+    const int inner_w = DialogMetrics::inner_w(DialogMetrics::kPeersW, margins);
     auto *layout = new QVBoxLayout(&dialog);
     layout->setContentsMargins(margins);
     layout->setSpacing(10);
@@ -4508,7 +4619,7 @@ void i2p_peers_exec(void *parent, const i2p_peers_in *in) {
 
         auto *table = new QTableWidget(in->peer_count, 5, pane);
         table->setObjectName(QStringLiteral("PeersTable"));
-        style_files_table(table, &dialog);
+        style_peers_table(table, &dialog);
         table->setHorizontalHeaderLabels({qstr(in->col_address), qstr(in->col_client), qstr(in->col_down),
                                           qstr(in->col_up), qstr(in->col_flags)});
         table->verticalHeader()->setVisible(false);
@@ -4516,13 +4627,22 @@ void i2p_peers_exec(void *parent, const i2p_peers_in *in) {
         table->setSelectionMode(QAbstractItemView::NoSelection);
         table->setFocusPolicy(Qt::NoFocus);
         table->setEditTriggers(QAbstractItemView::NoEditTriggers);
-        table->setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
         table->horizontalHeader()->setMinimumSectionSize(28);
         table->horizontalHeader()->setStretchLastSection(false);
         for (int column = 0; column < 5; ++column) {
             table->horizontalHeader()->setSectionResizeMode(column, QHeaderView::Fixed);
         }
+        if (QTableWidgetItem *down_hdr = table->horizontalHeaderItem(2)) {
+            down_hdr->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        }
+        if (QTableWidgetItem *up_hdr = table->horizontalHeaderItem(3)) {
+            up_hdr->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+        }
+        if (QTableWidgetItem *flags_hdr = table->horizontalHeaderItem(4)) {
+            flags_hdr->setTextAlignment(Qt::AlignHCenter | Qt::AlignVCenter);
+        }
 
+        const QFont hash_font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
         copy_texts.reserve(static_cast<size_t>(in->peer_count));
         for (int row = 0; row < in->peer_count; ++row) {
             const i2p_peer_row &peer = in->peers[row];
@@ -4531,12 +4651,35 @@ void i2p_peers_exec(void *parent, const i2p_peers_in *in) {
             copy_texts.push_back(tip.isEmpty() ? address : tip);
 
             auto *address_item = new QTableWidgetItem(address);
+            address_item->setFont(hash_font);
             address_item->setToolTip(tip.isEmpty() ? address : tip);
             table->setItem(row, 0, address_item);
-            table->setItem(row, 1, new QTableWidgetItem(qstr(peer.client)));
-            table->setItem(row, 2, new QTableWidgetItem(qstr(peer.rate_down)));
-            table->setItem(row, 3, new QTableWidgetItem(qstr(peer.rate_up)));
-            table->setItem(row, 4, new QTableWidgetItem(qstr(peer.flags)));
+
+            const QString client = qstr(peer.client);
+            auto *client_item = new QTableWidgetItem(client);
+            client_item->setToolTip(client);
+            table->setItem(row, 1, client_item);
+
+            const QString rate_down = qstr(peer.rate_down);
+            auto *down_item = new QTableWidgetItem(rate_down);
+            down_item->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+            down_item->setToolTip(rate_down);
+            table->setItem(row, 2, down_item);
+
+            const QString rate_up = qstr(peer.rate_up);
+            auto *up_item = new QTableWidgetItem(rate_up);
+            up_item->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+            up_item->setToolTip(rate_up);
+            table->setItem(row, 3, up_item);
+
+            const QString flags = qstr(peer.flags);
+            const QString flags_label = flags.isEmpty() ? QStringLiteral("—") : flags;
+            auto *flags_item = new QTableWidgetItem(flags_label);
+            flags_item->setTextAlignment(Qt::AlignHCenter | Qt::AlignVCenter);
+            if (!flags.isEmpty()) {
+                flags_item->setToolTip(flags);
+            }
+            table->setItem(row, 4, flags_item);
         }
 
         QObject::connect(table, &QTableWidget::cellDoubleClicked, &dialog,
@@ -4549,6 +4692,7 @@ void i2p_peers_exec(void *parent, const i2p_peers_in *in) {
                              }
                          });
 
+        new TableItemTooltipFilter(table);
         peers_table = table;
         pane_layout->addWidget(table);
         layout->addWidget(pane);
@@ -4566,15 +4710,22 @@ void i2p_peers_exec(void *parent, const i2p_peers_in *in) {
     add_dialog_buttons(layout, {close});
 
     exec_app_modal_dialog(
-        &dialog, host, inner_w, QSize(DialogMetrics::kFilesW, 0),
+        &dialog, host, inner_w, QSize(DialogMetrics::kPeersW, 0),
         [&] {
+            int dialog_w = DialogMetrics::kPeersW;
             if (peers_table != nullptr) {
-                layout_peers_table(peers_table, layout, DialogMetrics::kFilesW, DialogMetrics::kFilesH, note,
+                dialog_w = layout_peers_table(peers_table, layout, dialog_w, DialogMetrics::kFilesH, note,
+                                              dialog_buttons_row_height(close));
+                dialog_w = std::clamp(dialog_w, DialogMetrics::kPeersW, DialogMetrics::kPeersMaxW);
+                if (dialog.width() != dialog_w) {
+                    dialog.setFixedWidth(dialog_w);
+                }
+                layout_peers_table(peers_table, layout, dialog_w, DialogMetrics::kFilesH, note,
                                    dialog_buttons_row_height(close));
             }
             layout->activate();
             const int height = std::min(DialogMetrics::kFilesH, dialog.sizeHint().height());
-            dialog.setFixedSize(DialogMetrics::kFilesW, std::max(height, 160));
+            dialog.setFixedSize(dialog_w, std::max(height, 160));
         });
     if (g_tip) {
         g_tip->forceHide();

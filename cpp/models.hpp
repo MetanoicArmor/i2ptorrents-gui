@@ -45,6 +45,7 @@ struct Peer {
 
     QString displayAddress() const;
     QString tooltipAddress() const;
+    QString clipboardText() const;
     QString ratesDownLabel() const;
     QString ratesUpLabel() const;
 };
