@@ -31,7 +31,7 @@
 
 ## English
 
-A desktop client for i2pd’s torrent tunnel. The UI follows the look of [I2PChat-ng](https://github.com/MetanoicArmor/I2PChat-ng): light and night themes, cards, a compact sidebar, and native behaviour on Linux, Windows, and macOS.
+A desktop client for i2pd’s torrent tunnel, built with **C++17** and **Qt 6 Widgets**. The UI follows the look of [I2PChat-ng](https://github.com/MetanoicArmor/I2PChat-ng): light and night themes, cards, a compact sidebar, and native behaviour on Linux, Windows, and macOS.
 
 ### Features
 
@@ -124,13 +124,23 @@ If `9191` is closed, read `/var/lib/i2pd/i2pd.log` for `MyTorrents` /
 
 The GUI is a **Qt 6 Widgets** desktop app (same QSS themes). It talks to i2pd over Transmission RPC.
 
+### Source layout
+
+Active code is in `cpp/` (application logic), `native/` (Qt UI chrome), and `tests/`.
+The legacy `src/` Rust tree remains in the repository but is **not** built by CMake.
+
+### Run from source
+
 ```bash
 # Qt 6 development packages, then:
 #   macOS: brew install qt@6 cmake
-#   Debian/Ubuntu: sudo apt install qt6-base-dev qt6-tools-dev cmake
+#   Debian/Ubuntu: sudo apt install qt6-base-dev qt6-tools-dev cmake g++
 cmake -B build -DCMAKE_BUILD_TYPE=Release
+# macOS (Homebrew Qt):
+# cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$(brew --prefix qt@6)"
 cmake --build build
 ctest --test-dir build --output-on-failure
+# Linux without a display (CI, SSH): QT_QPA_PLATFORM=offscreen ctest --test-dir build --output-on-failure
 ./build/bin/I2PTorrents
 # Windows (PowerShell) — run once, then cmake in this or a new terminal:
 #   .\scripts\setup-windows-dev.ps1 -InstallQt
@@ -204,7 +214,7 @@ Current i2pd exposes `torrent-add`, `torrent-get`, and `torrent-remove`. `torren
 
 ## Русский
 
-Кроссплатформенный настольный клиент для встроенного torrent-клиента i2pd. Интерфейс выполнен в визуальном стиле [I2PChat-ng](https://github.com/MetanoicArmor/I2PChat-ng): светлая и ночная темы, карточки, компактная боковая панель и нативное поведение на Linux, Windows и macOS.
+Кроссплатформенный настольный клиент для встроенного torrent-клиента i2pd на **C++17** и **Qt 6 Widgets**. Интерфейс выполнен в визуальном стиле [I2PChat-ng](https://github.com/MetanoicArmor/I2PChat-ng): светлая и ночная темы, карточки, компактная боковая панель и нативное поведение на Linux, Windows и macOS.
 
 ### Возможности
 
@@ -300,13 +310,23 @@ curl -sS -X POST http://127.0.0.1:9191/mytorrents/rpc/ \
 
 GUI — это настольное приложение на **Qt 6 Widgets** (те же QSS-темы). Оно ходит в i2pd по Transmission RPC.
 
+### Структура исходников
+
+Активный код — в `cpp/` (логика приложения), `native/` (Qt UI chrome) и `tests/`.
+Устаревшее дерево Rust в `src/` остаётся в репозитории, но **не** входит в сборку CMake.
+
+### Запуск из исходников
+
 ```bash
 # пакеты Qt 6, затем:
 #   macOS: brew install qt@6 cmake
-#   Debian/Ubuntu: sudo apt install qt6-base-dev qt6-tools-dev cmake
+#   Debian/Ubuntu: sudo apt install qt6-base-dev qt6-tools-dev cmake g++
 cmake -B build -DCMAKE_BUILD_TYPE=Release
+# macOS (Homebrew Qt):
+# cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$(brew --prefix qt@6)"
 cmake --build build
 ctest --test-dir build --output-on-failure
+# Linux без дисплея (CI, SSH): QT_QPA_PLATFORM=offscreen ctest --test-dir build --output-on-failure
 ./build/bin/I2PTorrents
 # Windows (PowerShell) — один раз, затем cmake в этом или новом терминале:
 #   .\scripts\setup-windows-dev.ps1 -InstallQt
