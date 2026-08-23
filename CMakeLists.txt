@@ -104,3 +104,6 @@ set_target_properties(i2ptorrents-tests PROPERTIES
 )
 
 add_test(NAME core COMMAND i2ptorrents-tests WORKING_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set_tests_properties(core PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+endif()
