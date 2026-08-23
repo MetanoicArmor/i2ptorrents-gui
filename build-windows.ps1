@@ -92,12 +92,14 @@ if (Test-Path -LiteralPath $BuildDir) {
 }
 Invoke-NativeChecked cmake @("-S", $RepoRoot, "-B", $BuildDir, "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_PREFIX_PATH=$QtPrefix")
 Invoke-NativeChecked cmake @("--build", $BuildDir, "--config", "Release")
-$Bin = Join-Path $BuildDir "bin\$AppName.exe"
-if (-not (Test-Path -LiteralPath $Bin)) {
-    $Bin = Join-Path $BuildDir "Release\$AppName.exe"
-}
-if (-not (Test-Path -LiteralPath $Bin)) {
-    throw "missing binary $Bin"
+$BinCandidates = @(
+    (Join-Path $BuildDir "bin\Release\$AppName.exe"),
+    (Join-Path $BuildDir "bin\$AppName.exe"),
+    (Join-Path $BuildDir "Release\$AppName.exe")
+)
+$Bin = $BinCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+if (-not $Bin) {
+    throw "missing binary (checked: $($BinCandidates -join ', '))"
 }
 
 $Stage = Join-Path $RepoRoot "dist\$AppName"
