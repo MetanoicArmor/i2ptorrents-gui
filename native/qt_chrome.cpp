@@ -226,7 +226,7 @@ void apply_linux_window_chrome(QWidget *widget, bool night) {
         if (child->objectName() == QLatin1String("Sidebar")) {
             child->setAttribute(Qt::WA_TranslucentBackground, false);
             child->setAutoFillBackground(false);
-            install_linux_glass(child, night, 220);
+            install_linux_glass(child, night, 200);
         }
     }
 }
