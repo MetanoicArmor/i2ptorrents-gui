@@ -186,9 +186,10 @@ QTableWidget#FilesTable QHeaderView::section:last {
 }
 QTableWidget#FilesTable QScrollBar:horizontal { height: 0px; max-height: 0px; }
 QTableWidget#FilesTable QScrollBar:vertical { width: 0px; max-width: 0px; }
-QDialog QLineEdit, QDialog QSpinBox, QDialog QComboBox {
+QDialog QLineEdit, QDialog QSpinBox, QDialog QComboBox, QDialog QTextEdit {
     background: #ffffff;
     border: none;
+    color: #1d1d1f;
 }
 QDialog QComboBox:hover { background: #fafafc; }
 QDialog QFrame#SpinRow, QDialog QFrame#PathRow {

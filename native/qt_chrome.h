@@ -112,6 +112,38 @@ const char *i2p_settings_view(void);
 void i2p_defer(i2p_void_cb cb, void *ctx);
 const char *i2p_open_file(void *parent, const char *title, const char *filter);
 
+typedef struct i2p_create_torrent_in {
+    const char *stylesheet;
+    const char *title;
+    const char *source_label;
+    const char *source_value;
+    const char *browse_file;
+    const char *browse_folder;
+    const char *trackers_label;
+    const char *trackers_value;
+    const char *piece_label;
+    const char *piece_auto;
+    const char *private_label;
+    const char *comment_label;
+    const char *comment_value;
+    const char *save_label;
+    const char *save_value;
+    const char *browse_save;
+    const char *add_after_label;
+    int add_after_default;
+    const char *note;
+    const char *create;
+    const char *cancel;
+    const char *hashing;
+    const char *need_source;
+    const char *need_save;
+    const char *create_failed;
+} i2p_create_torrent_in;
+
+int i2p_create_torrent_exec(void *parent, const i2p_create_torrent_in *in);
+const char *i2p_create_torrent_path(void);
+int i2p_create_torrent_add_after(void);
+
 typedef struct i2p_about_in {
     const char *stylesheet;
     const char *title;

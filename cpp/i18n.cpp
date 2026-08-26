@@ -92,4 +92,21 @@ QString trArgs(const QString &key, const QHash<QString, QString> &args)
     return text;
 }
 
+QString pluralForm(qint64 count, const QString &one, const QString &few, const QString &many)
+{
+    const qint64 n = count < 0 ? -count : count;
+    if (language() != QStringLiteral("ru")) {
+        return n == 1 ? one : many;
+    }
+    const int mod100 = static_cast<int>(n % 100);
+    const int mod10 = static_cast<int>(n % 10);
+    if (mod10 == 1 && mod100 != 11) {
+        return one;
+    }
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) {
+        return few;
+    }
+    return many;
+}
+
 } // namespace i2p

@@ -7,6 +7,7 @@ int runI18nTests(int argc, char *argv[]);
 int runThemeTests(int argc, char *argv[]);
 int runPieceMapTests(int argc, char *argv[]);
 int runI2pdTunnelsTests(int argc, char *argv[]);
+int runTorrentCreateTests(int argc, char *argv[]);
 
 int main(int argc, char *argv[])
 {
@@ -19,5 +20,6 @@ int main(int argc, char *argv[])
     status |= runThemeTests(argc, argv);
     status |= runPieceMapTests(argc, argv);
     status |= runI2pdTunnelsTests(argc, argv);
+    status |= runTorrentCreateTests(argc, argv);
     return status;
 }

@@ -11,6 +11,7 @@
 #include <QClipboard>
 #include <QCloseEvent>
 #include <QDesktopServices>
+#include <QFile>
 #include <QFileInfo>
 #include <QHBoxLayout>
 #include <QLabel>
@@ -134,6 +135,8 @@ MainWindow::MainWindow(QWidget *parent)
     refreshButton_->setObjectName(QStringLiteral("RefreshButton"));
     refreshButton_->setText(QStringLiteral("↻"));
     topLayout->addWidget(refreshButton_);
+    createButton_ = new QPushButton(trKey(QStringLiteral("create_torrent")), top);
+    topLayout->addWidget(createButton_);
     addButton_ = new QPushButton(trKey(QStringLiteral("add_torrent")), top);
     addButton_->setObjectName(QStringLiteral("Primary"));
     topLayout->addWidget(addButton_);
@@ -162,10 +165,12 @@ MainWindow::MainWindow(QWidget *parent)
     connect(aboutButton_, &QPushButton::clicked, this, &MainWindow::dispatchAbout);
     connect(settingsButton_, &QPushButton::clicked, this, &MainWindow::dispatchSettings);
     connect(refreshButton_, &QToolButton::clicked, this, &MainWindow::dispatchRefresh);
+    connect(createButton_, &QPushButton::clicked, this, &MainWindow::dispatchCreate);
     connect(addButton_, &QPushButton::clicked, this, &MainWindow::dispatchAdd);
 
     addShortcut(this, QStringLiteral("Ctrl+T"), [this] { dispatchAdd(); });
     addShortcut(this, QStringLiteral("Ctrl+O"), [this] { dispatchOpen(); });
+    addShortcut(this, QStringLiteral("Ctrl+Shift+T"), [this] { dispatchCreate(); });
     addShortcut(this, QStringLiteral("Ctrl+S"), [this] { dispatchSettings(); });
     addShortcut(this, QStringLiteral("Ctrl+,"), [this] { dispatchSettings(); });
 
@@ -220,6 +225,9 @@ void MainWindow::applyChrome()
     setButtonText(reinterpret_cast<quintptr>(filterButtons_[1]), trKey(QStringLiteral("filter_downloading")));
     setButtonText(reinterpret_cast<quintptr>(filterButtons_[2]), trKey(QStringLiteral("filter_seeding")));
     setStatus();
+    setButtonText(reinterpret_cast<quintptr>(createButton_), trKey(QStringLiteral("create_torrent")));
+    createButton_->setToolTip(tipWithShortcuts(QStringLiteral("create_torrent_tip"),
+                                               {QStringLiteral("Ctrl+Shift+T")}));
     setButtonText(reinterpret_cast<quintptr>(addButton_), trKey(QStringLiteral("add_torrent")));
     addButton_->setToolTip(tipWithShortcuts(QStringLiteral("add_torrent_tip"),
                                             {QStringLiteral("Ctrl+T"), QStringLiteral("Ctrl+O")}));
@@ -450,9 +458,15 @@ QWidget *MainWindow::makeCard(const Torrent &torrent)
             meta << torrent.shortHash();
         }
         if (torrent.pieceCount > 0) {
-            meta << trArgs(QStringLiteral("pieces_meta"),
-                           {{QStringLiteral("count"), QString::number(torrent.pieceCount)},
-                            {QStringLiteral("size"), formatBytes(torrent.pieceSize)}});
+            meta << trArgs(
+                QStringLiteral("pieces_meta"),
+                {{QStringLiteral("count"), QString::number(torrent.pieceCount)},
+                 {QStringLiteral("pieces"),
+                  pluralForm(torrent.pieceCount,
+                             trKey(QStringLiteral("pieces_one")),
+                             trKey(QStringLiteral("pieces_few")),
+                             trKey(QStringLiteral("pieces_many")))},
+                 {QStringLiteral("size"), formatBytes(torrent.pieceSize)}});
         }
         if (!meta.isEmpty()) {
             auto *info = new QLabel(meta.join(QStringLiteral("  ·  ")), cardWidget);
@@ -644,6 +658,24 @@ void MainWindow::openTorrentFile()
     startAdd(*path);
 }
 
+void MainWindow::openCreateTorrentDialog()
+{
+    if (adding_) {
+        return;
+    }
+    defer([this]() {
+        const bool rpcOnline = statusMode_ == QStringLiteral("online");
+        const std::optional<CreateTorrentResult> result =
+            createTorrentExec(this, stylesheet(settings_.theme), rpcOnline);
+        if (!result.has_value()) {
+            return;
+        }
+        if (result->addAfter) {
+            startAdd(result->torrentPath);
+        }
+    });
+}
+
 void MainWindow::startAdd(const QString &source)
 {
     const QString trimmed = source.trimmed();
@@ -653,46 +685,58 @@ void MainWindow::startAdd(const QString &source)
                              trKey(QStringLiteral("file_not_found_text")));
         return;
     }
+    QFile file(trimmed);
+    if (!file.open(QIODevice::ReadOnly)) {
+        QMessageBox::warning(this, trKey(QStringLiteral("add_failed")), file.errorString());
+        return;
+    }
+    const QByteArray content = file.readAll();
+    startAddMetainfo(content, QFileInfo(trimmed).fileName());
+}
+
+void MainWindow::startAddMetainfo(const QByteArray &content, const QString &preferredName)
+{
+    if (adding_) {
+        return;
+    }
+    if (content.isEmpty()) {
+        QMessageBox::warning(this,
+                             trKey(QStringLiteral("add_failed")),
+                             trKey(QStringLiteral("rpc_empty_file")));
+        return;
+    }
     const bool rpcOnline = statusMode_ == QStringLiteral("online");
     adding_ = true;
     statusMode_ = QStringLiteral("copying");
     setStatus();
 
     AppSettings settings = settings_;
-    QThread *thread = QThread::create([this, trimmed, settings, rpcOnline]() {
+    const QString filename = preferredName.trimmed().isEmpty()
+                                 ? QStringLiteral("download.torrent")
+                                 : preferredName.trimmed();
+    QThread *thread = QThread::create([this, content, settings, rpcOnline, filename]() {
         QString error;
         std::optional<QString> saved;
-        QFile file(trimmed);
-        if (!file.open(QIODevice::ReadOnly)) {
-            error = file.errorString();
-        } else {
-            const QByteArray content = file.readAll();
-            if (content.isEmpty()) {
-                error = trKey(QStringLiteral("rpc_empty_file"));
-            } else if (rpcOnline) {
-                std::optional<QString> endpoint = normalizeRpcUrl(settings.rpcUrl, &error);
-                if (endpoint.has_value()) {
-                    RpcClient client(*endpoint);
-                    if (client.addTorrentBytes(content, &error).isEmpty() && !error.isEmpty()) {
-                        // keep error
-                    }
+        if (rpcOnline) {
+            std::optional<QString> endpoint = normalizeRpcUrl(settings.rpcUrl, &error);
+            if (endpoint.has_value()) {
+                RpcClient client(*endpoint);
+                if (client.addTorrentBytes(content, &error).isEmpty() && !error.isEmpty()) {
+                    // keep error
                 }
+            }
+        } else {
+            QString dirError;
+            const QString destRoot = settings.torrentsPath(&dirError);
+            if (destRoot.isEmpty()) {
+                error = dirError;
             } else {
-                QString dirError;
-                const QString destRoot = settings.torrentsPath(&dirError);
-                if (destRoot.isEmpty()) {
-                    error = dirError;
+                const QString dest = destRoot + QLatin1Char('/') + filename;
+                if (QFile destFile(dest); destFile.open(QIODevice::WriteOnly)) {
+                    destFile.write(content);
+                    saved = dest;
                 } else {
-                    const QString filename = QFileInfo(trimmed).fileName().isEmpty()
-                                                 ? QStringLiteral("download.torrent")
-                                                 : QFileInfo(trimmed).fileName();
-                    const QString dest = destRoot + QLatin1Char('/') + filename;
-                    if (QFile destFile(dest); destFile.open(QIODevice::WriteOnly)) {
-                        destFile.write(content);
-                        saved = dest;
-                    } else {
-                        error = destFile.errorString();
-                    }
+                    error = destFile.errorString();
                 }
             }
         }
@@ -771,6 +815,11 @@ void MainWindow::dispatchRefresh()
 void MainWindow::dispatchAdd()
 {
     openTorrentFile();
+}
+
+void MainWindow::dispatchCreate()
+{
+    openCreateTorrentDialog();
 }
 
 void MainWindow::dispatchOpen()

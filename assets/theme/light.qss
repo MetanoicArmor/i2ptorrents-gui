@@ -43,12 +43,14 @@ QToolButton#RefreshButton {
 }
 QToolButton#RefreshButton:hover { background: #ffffff; }
 QToolButton#RefreshButton:pressed { background: #dedee3; }
-QLineEdit, QSpinBox, QComboBox {
+QLineEdit, QSpinBox, QComboBox, QTextEdit {
     background: #e8e8ed; border: none; border-radius: 8px;
     padding: 6px 12px; min-height: 22px;
+    color: #1d1d1f;
+    selection-background-color: #0a84ff; selection-color: #ffffff;
 }
 QComboBox:hover { background: #dedee3; }
-QLineEdit:focus, QSpinBox:focus, QComboBox:focus { border: none; }
+QLineEdit:focus, QSpinBox:focus, QComboBox:focus, QTextEdit:focus { border: none; }
 QFrame#SpinRow, QFrame#PathRow {
     background: #e8e8ed; border: 1px solid transparent; border-radius: 8px;
 }

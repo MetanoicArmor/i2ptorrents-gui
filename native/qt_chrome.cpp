@@ -9,6 +9,8 @@
 #include "macos_vibrancy.h"
 #endif
 
+#include "torrent_create.hpp"
+
 #include <QAbstractItemView>
 #include <QAbstractAnimation>
 #include <QAbstractButton>
@@ -78,7 +80,11 @@
 #include <QTableWidget>
 #include <QTableWidgetItem>
 #include <QTextDocument>
+#include <QTextEdit>
 #include <QTextLayout>
+#include <QProgressBar>
+#include <QThread>
+#include <QEventLoop>
 #include <QTextLine>
 #include <QTextOption>
 #include <QTimer>
@@ -91,6 +97,7 @@
 #include <QWindow>
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <cstring>
 #include <functional>
@@ -424,6 +431,7 @@ void apply_real_dialog_window(QDialog *dialog) {
 struct DialogMetrics {
     static constexpr int kAboutW = 460;
     static constexpr int kSettingsW = 520;
+    static constexpr int kCreateW = 540;
     static constexpr int kSettingsH = 520;
     static constexpr int kFilesW = 640;
     static constexpr int kPeersW = 640;
@@ -3533,6 +3541,8 @@ thread_local std::string g_settings_theme;
 thread_local std::string g_settings_view;
 thread_local int g_settings_refresh = 2;
 thread_local std::string g_open_file;
+thread_local std::string g_create_torrent_path;
+thread_local int g_create_torrent_add_after = 0;
 
 class ComboPopupContainerChrome final : public QObject {
 public:
@@ -4051,11 +4061,30 @@ int i2p_settings_exec(void *parent, const i2p_settings_in *in) {
     auto *rpc_label = new QLabel(qstr(in->rpc_label), &dialog);
     rpc_label->setToolTip(qstr(in->rpc_tip));
     layout->addWidget(rpc_label);
-    auto *rpc = new QLineEdit(qstr(in->rpc_value), &dialog);
+    auto *rpc_row = new QFrame(&dialog);
+    rpc_row->setObjectName(QStringLiteral("PathRow"));
+    rpc_row->setFrameShape(QFrame::NoFrame);
+    lock_dialog_control(rpc_row);
+    rpc_row->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    auto *rpc_layout = new QHBoxLayout(rpc_row);
+    rpc_layout->setContentsMargins(0, 0, 0, 0);
+    rpc_layout->setSpacing(0);
+    auto *rpc = new QLineEdit(qstr(in->rpc_value), rpc_row);
+    rpc->setObjectName(QStringLiteral("ReadOnlyPath"));
+    rpc->setReadOnly(true);
+    rpc->setFocusPolicy(Qt::NoFocus);
     rpc->setPlaceholderText(qstr(in->rpc_placeholder));
     rpc->setToolTip(qstr(in->rpc_tip));
-    polish_line_edit(rpc);
-    layout->addWidget(rpc);
+    rpc->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+    rpc->setTextMargins(4, 0, 4, 0);
+    rpc->setFrame(false);
+    rpc->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+#ifdef Q_OS_MAC
+    rpc->setAttribute(Qt::WA_MacNormalSize, true);
+    rpc->setAttribute(Qt::WA_LayoutUsesWidgetRect, true);
+#endif
+    rpc_layout->addWidget(rpc, 1);
+    layout->addWidget(rpc_row);
 
     auto *dir_label = new QLabel(qstr(in->dir_label), &dialog);
     dir_label->setToolTip(qstr(in->dir_tip));
@@ -4144,6 +4173,7 @@ int i2p_settings_exec(void *parent, const i2p_settings_in *in) {
 
     exec_app_modal_dialog(&dialog, host, inner_w, QSize(DialogMetrics::kSettingsW, 0), [&] {
         lock_wrapped_label(note, inner_w);
+        lock_dialog_control(rpc_row);
         dir_row->setMinimumWidth(inner_w);
         lock_dialog_control(path_row);
         lock_dialog_control(browse);
@@ -4176,6 +4206,319 @@ const char *i2p_open_file(void *parent, const char *title, const char *filter) {
     }
     return g_open_file.c_str();
 }
+
+int i2p_create_torrent_exec(void *parent, const i2p_create_torrent_in *in) {
+    if (in == nullptr) {
+        return 0;
+    }
+    g_create_torrent_path.clear();
+    g_create_torrent_add_after = 0;
+
+    QWidget *host = as_widget(parent);
+    QDialog dialog(nullptr, hosted_dialog_flags());
+    prepare_hosted_dialog(&dialog);
+    dialog.setWindowTitle(qstr(in->title));
+    dialog.setFixedWidth(DialogMetrics::kCreateW);
+    if (in->stylesheet && in->stylesheet[0] != '\0') {
+        dialog.setStyleSheet(qstr(in->stylesheet));
+    }
+
+    const QMargins margins = DialogMetrics::dialog_margins(18, 18);
+    const int inner_w = DialogMetrics::inner_w(DialogMetrics::kCreateW, margins);
+    const bool night = stylesheet_is_night(dialog.styleSheet());
+
+    auto *layout = new QVBoxLayout(&dialog);
+    layout->setContentsMargins(margins);
+    layout->setSpacing(10);
+
+    layout->addWidget(new QLabel(qstr(in->source_label), &dialog));
+    auto *source_row = new QWidget(&dialog);
+    source_row->setFixedHeight(DialogMetrics::kControlMinH);
+    auto *source_layout = new QHBoxLayout(source_row);
+    source_layout->setContentsMargins(0, 0, 0, 0);
+    source_layout->setSpacing(8);
+    auto *source_frame = new QFrame(source_row);
+    source_frame->setObjectName(QStringLiteral("PathRow"));
+    lock_dialog_control(source_frame);
+    auto *source_frame_layout = new QHBoxLayout(source_frame);
+    source_frame_layout->setContentsMargins(0, 0, 0, 0);
+    auto *source = new QLineEdit(qstr(in->source_value), source_frame);
+    source->setFrame(false);
+    source->setTextMargins(4, 0, 4, 0);
+    source_frame_layout->addWidget(source, 1);
+    source_layout->addWidget(source_frame, 1);
+    auto *browse_file = new QPushButton(qstr(in->browse_file), source_row);
+    auto *browse_folder = new QPushButton(qstr(in->browse_folder), source_row);
+    lock_dialog_control(browse_file);
+    lock_dialog_control(browse_folder);
+    source_layout->addWidget(browse_file);
+    source_layout->addWidget(browse_folder);
+    layout->addWidget(source_row);
+
+    layout->addWidget(new QLabel(qstr(in->trackers_label), &dialog));
+    auto *trackers = new QTextEdit(&dialog);
+    trackers->setObjectName(QStringLiteral("CreateTrackers"));
+    trackers->setAcceptRichText(false);
+    trackers->setFrameShape(QFrame::NoFrame);
+    trackers->setPlainText(qstr(in->trackers_value));
+    trackers->setFixedHeight(72);
+    trackers->setTabChangesFocus(true);
+    layout->addWidget(trackers);
+
+    layout->addWidget(new QLabel(qstr(in->piece_label), &dialog));
+    auto *piece = settings_combo(&dialog, night, in->piece_auto, "0", in->piece_auto, "0", "0");
+    // Rebuild piece size options properly
+    {
+        QComboBox *combo = piece;
+        combo->clear();
+        combo->addItem(qstr(in->piece_auto), QStringLiteral("0"));
+        const quint32 sizes[] = {16u, 32u, 64u, 128u, 256u, 512u, 1024u, 2048u, 4096u, 8192u, 16384u};
+        for (quint32 kib : sizes) {
+            const QString label =
+                kib >= 1024u ? QStringLiteral("%1 MiB").arg(kib / 1024u) : QStringLiteral("%1 KiB").arg(kib);
+            combo->addItem(label, QString::number(kib * 1024u));
+        }
+        combo->setCurrentIndex(0);
+    }
+    layout->addWidget(piece->parentWidget());
+
+    auto *is_private = new QCheckBox(qstr(in->private_label), &dialog);
+    layout->addWidget(is_private);
+
+    layout->addWidget(new QLabel(qstr(in->comment_label), &dialog));
+    auto *comment = new QLineEdit(qstr(in->comment_value), &dialog);
+    polish_line_edit(comment);
+    layout->addWidget(comment);
+
+    layout->addWidget(new QLabel(qstr(in->save_label), &dialog));
+    auto *save_row = new QWidget(&dialog);
+    save_row->setFixedHeight(DialogMetrics::kControlMinH);
+    auto *save_layout = new QHBoxLayout(save_row);
+    save_layout->setContentsMargins(0, 0, 0, 0);
+    save_layout->setSpacing(8);
+    auto *save_frame = new QFrame(save_row);
+    save_frame->setObjectName(QStringLiteral("PathRow"));
+    lock_dialog_control(save_frame);
+    auto *save_frame_layout = new QHBoxLayout(save_frame);
+    save_frame_layout->setContentsMargins(0, 0, 0, 0);
+    auto *save_path = new QLineEdit(qstr(in->save_value), save_frame);
+    save_path->setFrame(false);
+    save_path->setTextMargins(4, 0, 4, 0);
+    save_frame_layout->addWidget(save_path, 1);
+    save_layout->addWidget(save_frame, 1);
+    auto *browse_save = new QPushButton(qstr(in->browse_save), save_row);
+    lock_dialog_control(browse_save);
+    save_layout->addWidget(browse_save);
+    layout->addWidget(save_row);
+
+    auto *add_after = new QCheckBox(qstr(in->add_after_label), &dialog);
+    add_after->setChecked(in->add_after_default != 0);
+    layout->addWidget(add_after);
+
+    auto *note = new QLabel(qstr(in->note), &dialog);
+    note->setObjectName(QStringLiteral("Secondary"));
+    lock_wrapped_label(note, inner_w);
+    layout->addWidget(note);
+
+    auto *progress = new QProgressBar(&dialog);
+    progress->setRange(0, 100);
+    progress->setValue(0);
+    progress->setTextVisible(true);
+    progress->setVisible(false);
+    layout->addWidget(progress);
+
+    auto *status = new QLabel(&dialog);
+    status->setObjectName(QStringLiteral("Secondary"));
+    status->setVisible(false);
+    layout->addWidget(status);
+
+    auto *cancel = new QPushButton(qstr(in->cancel), &dialog);
+    auto *create = new QPushButton(qstr(in->create), &dialog);
+    create->setObjectName(QStringLiteral("Primary"));
+    create->setDefault(true);
+    add_dialog_buttons(layout, {cancel, create});
+
+    QObject::connect(browse_file, &QPushButton::clicked, &dialog, [source, &dialog, in] {
+        const QString path =
+            QFileDialog::getOpenFileName(&dialog, qstr(in->source_label), source->text());
+        if (!path.isEmpty()) {
+            source->setText(path);
+        }
+    });
+    QObject::connect(browse_folder, &QPushButton::clicked, &dialog, [source, &dialog, in] {
+        const QString path =
+            QFileDialog::getExistingDirectory(&dialog, qstr(in->source_label), source->text());
+        if (!path.isEmpty()) {
+            source->setText(path);
+        }
+    });
+    QObject::connect(browse_save, &QPushButton::clicked, &dialog, [save_path, source, &dialog, in] {
+        QString suggestion = save_path->text();
+        if (suggestion.isEmpty()) {
+            const QFileInfo info(source->text());
+            if (!info.fileName().isEmpty()) {
+                suggestion = info.absolutePath() + QLatin1Char('/') + info.completeBaseName() +
+                             QStringLiteral(".torrent");
+            }
+        }
+        const QString path = QFileDialog::getSaveFileName(
+            &dialog, qstr(in->save_label), suggestion, QStringLiteral("*.torrent"));
+        if (!path.isEmpty()) {
+            save_path->setText(path.endsWith(QStringLiteral(".torrent"), Qt::CaseInsensitive)
+                                   ? path
+                                   : path + QStringLiteral(".torrent"));
+        }
+    });
+
+    std::atomic_bool hashing{false};
+    std::atomic_bool cancel_hash{false};
+    QObject::connect(cancel, &QPushButton::clicked, &dialog, [&] {
+        if (hashing.load()) {
+            cancel_hash.store(true);
+            return;
+        }
+        dialog.reject();
+    });
+
+    QObject::connect(create, &QPushButton::clicked, &dialog, [&] {
+        if (hashing.load()) {
+            return;
+        }
+        const QString src = source->text().trimmed();
+        QString out = save_path->text().trimmed();
+        if (src.isEmpty() || !QFileInfo::exists(src)) {
+            QMessageBox::warning(&dialog, qstr(in->title), qstr(in->need_source));
+            return;
+        }
+        if (out.isEmpty()) {
+            const QFileInfo info(src);
+            out = info.absolutePath() + QLatin1Char('/') + info.completeBaseName() +
+                  QStringLiteral(".torrent");
+            save_path->setText(out);
+        }
+        if (out.trimmed().isEmpty()) {
+            QMessageBox::warning(&dialog, qstr(in->title), qstr(in->need_save));
+            return;
+        }
+
+        i2p::CreateTorrentRequest req;
+        req.sourcePath = src;
+        req.trackers = trackers->toPlainText().split(QLatin1Char('\n'), Qt::SkipEmptyParts);
+        req.pieceSize = static_cast<quint32>(combo_data_string(piece).empty()
+                                                 ? 0
+                                                 : QString::fromStdString(combo_data_string(piece)).toUInt());
+        req.isPrivate = is_private->isChecked();
+        req.comment = comment->text();
+        req.createdBy = QStringLiteral("I2P Torrents");
+
+        hashing.store(true);
+        cancel_hash.store(false);
+        create->setEnabled(false);
+        source->setEnabled(false);
+        browse_file->setEnabled(false);
+        browse_folder->setEnabled(false);
+        trackers->setEnabled(false);
+        piece->setEnabled(false);
+        is_private->setEnabled(false);
+        comment->setEnabled(false);
+        save_path->setEnabled(false);
+        browse_save->setEnabled(false);
+        add_after->setEnabled(false);
+        progress->setVisible(true);
+        progress->setValue(0);
+        status->setVisible(true);
+        status->setText(qstr(in->hashing));
+
+        std::optional<QByteArray> metainfo;
+        QString error;
+        QEventLoop loop;
+        QThread *thread = QThread::create([&] {
+            metainfo = i2p::createTorrentMetainfo(
+                req,
+                &error,
+                &cancel_hash,
+                [&](const i2p::CreateTorrentProgress &p) {
+                    const int pct =
+                        p.pieceCount == 0
+                            ? 0
+                            : static_cast<int>((p.pieceIndex * 100ull) / p.pieceCount);
+                    QMetaObject::invokeMethod(
+                        progress,
+                        [progress, status, in, pct, p] {
+                            progress->setValue(std::clamp(pct, 0, 100));
+                            status->setText(QStringLiteral("%1 (%2/%3)")
+                                                .arg(qstr(in->hashing))
+                                                .arg(p.pieceIndex)
+                                                .arg(p.pieceCount));
+                        },
+                        Qt::QueuedConnection);
+                });
+            QMetaObject::invokeMethod(&loop, &QEventLoop::quit, Qt::QueuedConnection);
+        });
+        QObject::connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+        thread->start();
+        loop.exec();
+        hashing.store(false);
+
+        if (!metainfo.has_value()) {
+            create->setEnabled(true);
+            source->setEnabled(true);
+            browse_file->setEnabled(true);
+            browse_folder->setEnabled(true);
+            trackers->setEnabled(true);
+            piece->setEnabled(true);
+            is_private->setEnabled(true);
+            comment->setEnabled(true);
+            save_path->setEnabled(true);
+            browse_save->setEnabled(true);
+            add_after->setEnabled(true);
+            progress->setVisible(false);
+            status->setVisible(false);
+            if (error != QStringLiteral("Cancelled")) {
+                QMessageBox::warning(&dialog,
+                                     qstr(in->create_failed),
+                                     error.isEmpty() ? qstr(in->create_failed) : error);
+            }
+            return;
+        }
+
+        QString saveError;
+        if (!i2p::saveTorrentMetainfo(*metainfo, out, &saveError)) {
+            create->setEnabled(true);
+            source->setEnabled(true);
+            browse_file->setEnabled(true);
+            browse_folder->setEnabled(true);
+            trackers->setEnabled(true);
+            piece->setEnabled(true);
+            is_private->setEnabled(true);
+            comment->setEnabled(true);
+            save_path->setEnabled(true);
+            browse_save->setEnabled(true);
+            add_after->setEnabled(true);
+            progress->setVisible(false);
+            status->setVisible(false);
+            QMessageBox::warning(&dialog, qstr(in->create_failed), saveError);
+            return;
+        }
+
+        g_create_torrent_path = out.toStdString();
+        g_create_torrent_add_after = add_after->isChecked() ? 1 : 0;
+        dialog.accept();
+    });
+
+    exec_app_modal_dialog(&dialog, host, inner_w, QSize(DialogMetrics::kCreateW, 0), [&] {
+        lock_wrapped_label(note, inner_w);
+        lock_dialog_control(source_frame);
+        lock_dialog_control(save_frame);
+        lock_dialog_control(browse_file);
+        lock_dialog_control(browse_folder);
+        lock_dialog_control(browse_save);
+    });
+    return dialog.result() == QDialog::Accepted ? 1 : 0;
+}
+
+const char *i2p_create_torrent_path(void) { return g_create_torrent_path.c_str(); }
+int i2p_create_torrent_add_after(void) { return g_create_torrent_add_after; }
 
 static bool stylesheet_is_night(const char *stylesheet) {
     if (stylesheet == nullptr || stylesheet[0] == '\0') {

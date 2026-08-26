@@ -11,6 +11,7 @@ private slots:
     void normalizeLanguageAliases();
     void aboutStrings();
     void translationCatalogsHaveSameKeys();
+    void russianPiecesPlural();
 };
 
 void I18nTests::defaultLanguageIsEnglish()
@@ -59,6 +60,32 @@ void I18nTests::translationCatalogsHaveSameKeys()
     const QString ruSettings = i2p::trKey(QStringLiteral("settings"));
     QVERIFY(!enSettings.isEmpty());
     QVERIFY(!ruSettings.isEmpty());
+}
+
+void I18nTests::russianPiecesPlural()
+{
+    i2p::setLanguage(QStringLiteral("ru"));
+    QCOMPARE(i2p::pluralForm(1, QStringLiteral("кусок"), QStringLiteral("куска"), QStringLiteral("кусков")),
+             QStringLiteral("кусок"));
+    QCOMPARE(i2p::pluralForm(2, QStringLiteral("кусок"), QStringLiteral("куска"), QStringLiteral("кусков")),
+             QStringLiteral("куска"));
+    QCOMPARE(i2p::pluralForm(4, QStringLiteral("кусок"), QStringLiteral("куска"), QStringLiteral("кусков")),
+             QStringLiteral("куска"));
+    QCOMPARE(i2p::pluralForm(5, QStringLiteral("кусок"), QStringLiteral("куска"), QStringLiteral("кусков")),
+             QStringLiteral("кусков"));
+    QCOMPARE(i2p::pluralForm(11, QStringLiteral("кусок"), QStringLiteral("куска"), QStringLiteral("кусков")),
+             QStringLiteral("кусков"));
+    QCOMPARE(i2p::pluralForm(21, QStringLiteral("кусок"), QStringLiteral("куска"), QStringLiteral("кусков")),
+             QStringLiteral("кусок"));
+    QCOMPARE(i2p::pluralForm(22, QStringLiteral("кусок"), QStringLiteral("куска"), QStringLiteral("кусков")),
+             QStringLiteral("куска"));
+    QCOMPARE(i2p::pluralForm(105, QStringLiteral("кусок"), QStringLiteral("куска"), QStringLiteral("кусков")),
+             QStringLiteral("кусков"));
+    i2p::setLanguage(QStringLiteral("en"));
+    QCOMPARE(i2p::pluralForm(1, QStringLiteral("piece"), QStringLiteral("pieces"), QStringLiteral("pieces")),
+             QStringLiteral("piece"));
+    QCOMPARE(i2p::pluralForm(2, QStringLiteral("piece"), QStringLiteral("pieces"), QStringLiteral("pieces")),
+             QStringLiteral("pieces"));
 }
 
 int runI18nTests(int argc, char *argv[])

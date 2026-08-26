@@ -180,9 +180,10 @@ Version comes from the `VERSION` file.
 
 1. Start i2pd with a working `[MyTorrents]` section.
 2. Open **Settings**:
-   - **RPC address** — editable connection URL for the GUI. `rpcport` / `rpcpath` live in `tunnels.conf`; if your settings still use the default URL, the GUI can fill it from that file.
-   - **Torrents folder** — read-only, taken from `torrentsdir` in `tunnels.conf`. **Browse** opens the folder in the OS file manager; change the path only in i2pd’s config, then restart i2pd.
+   - **RPC address** — read-only from `rpcport` / `rpcpath` in `tunnels.conf`. Change those keys and restart i2pd.
+   - **Torrents folder** — read-only from `torrentsdir`. **Browse** opens the folder in the OS file manager; change the path only in i2pd’s config, then restart i2pd.
 3. Offline fallback (RPC unavailable): the GUI may copy a `.torrent` into the saved folder path — that still needs write permission on `torrentsdir`.
+4. **Create torrent** builds a BitTorrent v1 `.torrent` locally (SHA-1 pieces, like `transmission-create`). Default announce comes from `trackers=` in `tunnels.conf`. Optionally add the new file to i2pd via RPC. For seeding, keep the data under `torrentsdir` with matching paths.
 
 ### Features
 
@@ -190,13 +191,13 @@ Version comes from the `VERSION` file.
 - file list on torrent click (available before the download finishes);
 - simple card view in settings;
 - copy info hash and open the download folder;
-- add `.torrent` files; remove with or without data;
+- add `.torrent` files; **create** `.torrent` from a file or folder; remove with or without data;
 - search, filters, language (English / Русский), theme;
 - automatic refresh and connection diagnostics.
 
 ### i2pd RPC limits
 
-Current i2pd exposes `torrent-add`, `torrent-get`, and `torrent-remove`. On the openssl branch, `torrent-get` returns `files`, `wanted`, `priorities`, `percentDone`, `eta`, `trackers`, and peer `clientName`/`progress` (BEP10). `wanted`/`priorities` are still stubs, and `torrent-set` is not implemented yet. Pause, resume, tracker edits, speed limits, and magnet links are not available. Add a ready `.torrent` file.
+Current i2pd exposes `torrent-add`, `torrent-get`, and `torrent-remove`. On the openssl branch, `torrent-get` returns `files`, `wanted`, `priorities`, `percentDone`, `eta`, `trackers`, and peer `clientName`/`progress` (BEP10). `wanted`/`priorities` are still stubs, and `torrent-set` is not implemented yet. Pause, resume, tracker edits, speed limits, and magnet links are not available. Create torrent in the GUI, or add a ready `.torrent` file.
 
 ### License
 
@@ -346,9 +347,10 @@ ctest --test-dir build --output-on-failure
 
 1. Запустите i2pd с рабочей секцией `[MyTorrents]`.
 2. Откройте **Настройки**:
-   - **Адрес RPC** — редактируемый URL для GUI. `rpcport` / `rpcpath` задаются в `tunnels.conf`; при дефолтном URL GUI может подставить значение из конфига.
+   - **Адрес RPC** — только чтение из `rpcport` / `rpcpath` в `tunnels.conf`. Меняйте эти ключи и перезапускайте i2pd.
    - **Каталог торрентов** — только чтение из `torrentsdir`. **Обзор** открывает папку в проводнике ОС; путь меняйте только в конфиге i2pd и перезапускайте демон.
 3. Offline-fallback: при недоступном RPC GUI может копировать `.torrent` в сохранённый путь — нужны права записи на `torrentsdir`.
+4. **Создать торрент** собирает BitTorrent v1 `.torrent` локально (SHA-1 кусков, как `transmission-create`). Announce по умолчанию из `trackers=` в `tunnels.conf`. Можно сразу добавить файл в i2pd через RPC. Для раздачи данные должны быть в `torrentsdir` с теми же путями.
 
 ### Возможности
 
@@ -356,13 +358,13 @@ ctest --test-dir build --output-on-failure
 - список файлов по клику на карточку;
 - упрощённый вид карточек в настройках;
 - копирование info hash и открытие папки загрузки;
-- добавление `.torrent`; удаление с данными или без;
+- добавление `.torrent`; **создание** `.torrent` из файла или папки; удаление с данными или без;
 - поиск, фильтры, язык, тема;
 - автообновление и диагностика соединения.
 
 ### Ограничения i2pd RPC
 
-Доступны `torrent-add`, `torrent-get`, `torrent-remove`. В ветке openssl — `files`, `wanted`, `priorities`, `percentDone`, `eta`, `trackers`, у пиров `clientName`/`progress`. `torrent-set`, пауза, resume, правка трекеров, лимиты и magnet пока недоступны. Добавляйте готовый `.torrent`.
+Доступны `torrent-add`, `torrent-get`, `torrent-remove`. В ветке openssl — `files`, `wanted`, `priorities`, `percentDone`, `eta`, `trackers`, у пиров `clientName`/`progress`. `torrent-set`, пауза, resume, правка трекеров, лимиты и magnet пока недоступны. Создавайте торрент в GUI или добавляйте готовый `.torrent`.
 
 ### Лицензия
 

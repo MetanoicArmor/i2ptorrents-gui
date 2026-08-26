@@ -27,6 +27,7 @@ protected:
 private slots:
     void dispatchRefresh();
     void dispatchAdd();
+    void dispatchCreate();
     void dispatchOpen();
     void dispatchSettings();
     void dispatchAbout();
@@ -46,7 +47,9 @@ private:
     QWidget *makeCard(const Torrent &torrent);
     void spawnRefresh();
     void openTorrentFile();
+    void openCreateTorrentDialog();
     void startAdd(const QString &source);
+    void startAddMetainfo(const QByteArray &content, const QString &preferredName);
     void showActions(const Torrent &torrent, quintptr morePtr);
     void showFiles(qint64 torrentId, const QString &name);
     void showPeers(qint64 torrentId, const QString &name);
@@ -76,6 +79,7 @@ private:
     QLabel *subtitleLabel_ = nullptr;
     QLabel *sectionLabel_ = nullptr;
     QPushButton *addButton_ = nullptr;
+    QPushButton *createButton_ = nullptr;
     QPushButton *settingsButton_ = nullptr;
     QPushButton *aboutButton_ = nullptr;
     QToolButton *refreshButton_ = nullptr;

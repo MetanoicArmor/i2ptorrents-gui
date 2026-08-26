@@ -282,6 +282,57 @@ std::optional<QString> openFile(QWidget *parent, const QString &title, const QSt
     return QString::fromUtf8(raw);
 }
 
+std::optional<CreateTorrentResult> createTorrentExec(QWidget *parent,
+                                                     const QString &stylesheet,
+                                                     bool rpcOnline)
+{
+    QString trackers = QStringLiteral("http://tracker2.postman.i2p/announce.php");
+    if (const auto tunnel = detectTorrentsTunnel()) {
+        if (!tunnel->trackers.isEmpty()) {
+            trackers = tunnel->trackers.join(QLatin1Char('\n'));
+        }
+    }
+
+    Utf8Holder utf8;
+    i2p_create_torrent_in input{
+        utf8.add(stylesheet),
+        utf8.add(trKey(QStringLiteral("create_title"))),
+        utf8.add(trKey(QStringLiteral("create_source"))),
+        utf8.addLiteral(""),
+        utf8.add(trKey(QStringLiteral("create_browse_file"))),
+        utf8.add(trKey(QStringLiteral("create_browse_folder"))),
+        utf8.add(trKey(QStringLiteral("create_trackers"))),
+        utf8.add(trackers),
+        utf8.add(trKey(QStringLiteral("create_piece_size"))),
+        utf8.add(trKey(QStringLiteral("create_piece_auto"))),
+        utf8.add(trKey(QStringLiteral("create_private"))),
+        utf8.add(trKey(QStringLiteral("create_comment"))),
+        utf8.addLiteral(""),
+        utf8.add(trKey(QStringLiteral("create_save_as"))),
+        utf8.addLiteral(""),
+        utf8.add(trKey(QStringLiteral("browse"))),
+        utf8.add(trKey(QStringLiteral("create_add_after"))),
+        rpcOnline ? 1 : 0,
+        utf8.add(trKey(QStringLiteral("create_note"))),
+        utf8.add(trKey(QStringLiteral("create_action"))),
+        utf8.add(trKey(QStringLiteral("cancel"))),
+        utf8.add(trKey(QStringLiteral("create_hashing"))),
+        utf8.add(trKey(QStringLiteral("create_need_source"))),
+        utf8.add(trKey(QStringLiteral("create_need_save"))),
+        utf8.add(trKey(QStringLiteral("create_failed"))),
+    };
+    if (i2p_create_torrent_exec(parent, &input) == 0) {
+        return std::nullopt;
+    }
+    CreateTorrentResult result;
+    result.torrentPath = QString::fromUtf8(i2p_create_torrent_path());
+    result.addAfter = i2p_create_torrent_add_after() != 0;
+    if (result.torrentPath.trimmed().isEmpty()) {
+        return std::nullopt;
+    }
+    return result;
+}
+
 void aboutExec(QWidget *parent, const QString &stylesheet)
 {
     const QString body = trArgs(QStringLiteral("about_body"),
@@ -313,12 +364,9 @@ std::optional<SettingsResult> settingsExec(QWidget *parent,
     QString rpcTip = trKey(QStringLiteral("settings_rpc_tip"));
     QString dirTip = trKey(QStringLiteral("settings_dir_tip"));
     if (const auto tunnel = detectTorrentsTunnel()) {
+        display.rpcUrl = tunnel->rpcUrl();
         if (!tunnel->torrentsDir.isEmpty()) {
             display.torrentsDir = tunnel->torrentsDir;
-        }
-        const QString defaultRpc = QStringLiteral("http://127.0.0.1:9191/mytorrents");
-        if (display.rpcUrl.trimmed().isEmpty() || display.rpcUrl.trimmed() == defaultRpc) {
-            display.rpcUrl = tunnel->rpcUrl();
         }
         if (!tunnel->confPath.isEmpty()) {
             rpcTip = trKey(QStringLiteral("settings_rpc_tip_with_path"))

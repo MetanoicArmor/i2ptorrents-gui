@@ -20,6 +20,8 @@ set(I2P_CORE_SOURCES
     cpp/theme.cpp
     cpp/config.cpp
     cpp/i2pd_tunnels.cpp
+    cpp/bencode.cpp
+    cpp/torrent_create.cpp
     cpp/models.cpp
     cpp/piece_map.cpp
     cpp/rpc.cpp
@@ -85,6 +87,7 @@ qt_add_executable(i2ptorrents-tests
     tests/test_theme.cpp
     tests/test_piece_map.cpp
     tests/test_i2pd_tunnels.cpp
+    tests/test_torrent_create.cpp
     ${I2P_CORE_SOURCES}
     assets/resources.qrc
 )
