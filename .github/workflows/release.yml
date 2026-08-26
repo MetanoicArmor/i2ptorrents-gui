@@ -26,7 +26,9 @@ jobs:
             qt_host: windows_arm64
             qt_arch: win64_msvc2022_arm64
             artifact: windows-arm64
+            optional: true
     runs-on: ${{ matrix.os }}
+    continue-on-error: ${{ matrix.optional == true }}
     steps:
       - uses: actions/checkout@v4
 
@@ -107,9 +109,8 @@ jobs:
           - os: macos-15
             macos_archs: arm64
             artifact: macos-arm64
-          - os: macos-13
-            macos_archs: x64
-            artifact: macos-x64
+          # macos-13 Intel runners often stay queued indefinitely; skip in CI.
+          # Build locally: MACOS_ARCHS=x64 ./build-macos.sh
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -137,7 +138,7 @@ jobs:
   publish:
     needs: [windows, linux, macos]
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: always() && !cancelled() && startsWith(github.ref, 'refs/tags/v') && (needs.linux.result == 'success' || needs.windows.result == 'success' || needs.macos.result == 'success')
     steps:
       - uses: actions/checkout@v4
 

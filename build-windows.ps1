@@ -69,7 +69,14 @@ Write-Host "==> Generating icons from image.png"
 Copy-Item -Force "image.png" "icon.png"
 $Magick = Get-Command magick -ErrorAction SilentlyContinue
 if ($Magick) {
-    Invoke-NativeChecked $Magick.Source @("icon.png", "-define", "icon:auto-resize=256,128,64,48,32,24,16", "I2PTorrents.ico")
+    try {
+        & $Magick.Source @("icon.png", "-define", "icon:auto-resize=256,128,64,48,32,24,16", "I2PTorrents.ico")
+        if ($LASTEXITCODE -ne 0) {
+            Write-Warning "ImageMagick failed to build I2PTorrents.ico (exit $LASTEXITCODE); continuing without .ico"
+        }
+    } catch {
+        Write-Warning "ImageMagick failed to build I2PTorrents.ico: $_; continuing without .ico"
+    }
 }
 
 $SyncFonts = Join-Path $RepoRoot "scripts\sync-inter-fonts.ps1"
