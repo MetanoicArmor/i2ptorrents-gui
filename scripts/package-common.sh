@@ -62,11 +62,6 @@ copy_runtime_files() {
     cp "${ROOT}/image.png" "${dest}/icon.png"
   fi
   cp "${ROOT}/VERSION" "${ROOT}/AUTHORS" "${ROOT}/LICENSE" "${dest}/"
-  if [ -f "${ROOT}/assets/ton_donation_qr.png" ]; then
-    cp "${ROOT}/assets/ton_donation_qr.png" "${dest}/ton_donation_qr.png"
-  elif [ -f "${ROOT}/ton_donation_qr.png" ]; then
-    cp "${ROOT}/ton_donation_qr.png" "${dest}/ton_donation_qr.png"
-  fi
   if [ -d "${ROOT}/assets/fonts" ]; then
     mkdir -p "${dest}/fonts"
     for font in "${ROOT}/assets/fonts"/Inter-*.otf "${ROOT}/assets/fonts"/Inter-*.ttf; do

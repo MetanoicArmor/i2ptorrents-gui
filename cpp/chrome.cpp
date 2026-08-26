@@ -339,7 +339,7 @@ void aboutExec(QWidget *parent, const QString &stylesheet)
                                 {{QStringLiteral("version"), appVersion()},
                                  {QStringLiteral("author"), APP_AUTHOR},
                                  {QStringLiteral("license"), APP_LICENSE}});
-    const QString qr = resourcePath(QStringLiteral("ton_donation_qr.png"));
+    const QString qr = QStringLiteral(":/btc_donation_qr.png");
     Utf8Holder utf8;
     i2p_about_in input{
         utf8.add(stylesheet),
@@ -348,8 +348,8 @@ void aboutExec(QWidget *parent, const QString &stylesheet)
         utf8.add(body),
         utf8.add(trKey(QStringLiteral("github"))),
         APP_GITHUB,
-        utf8.add(trKey(QStringLiteral("donate_gram"))),
-        APP_TON_ADDRESS,
+        utf8.add(trKey(QStringLiteral("donate_btc"))),
+        APP_BTC_ADDRESS,
         utf8.add(qr),
         utf8.add(trKey(QStringLiteral("ok"))),
     };

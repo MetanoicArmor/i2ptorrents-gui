@@ -250,3 +250,9 @@ chmod +x "${APPDIR}/AppRun" "${APPDIR}/usr/bin/${APP_NAME}"
 
 pack_appimage "${APPDIR}" "${LINUX_ARCH}" "${HOST_ARCH}"
 echo "✔ GUI onedir: ${STAGE}/"
+
+echo "==> Building .deb / .rpm"
+chmod +x "${ROOT}/scripts/package-linux-deb-rpm.sh"
+"${ROOT}/scripts/package-linux-deb-rpm.sh" "${STAGE}" "${LINUX_ARCH}" || \
+  echo "WARNING: native package step failed" >&2
+

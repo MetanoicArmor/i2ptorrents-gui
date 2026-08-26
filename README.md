@@ -154,7 +154,7 @@ Release / AppImage:
 ./build-linux.sh
 ```
 
-Result: `dist/I2PTorrents/`, zip, and an AppImage in `dist/` when `appimagetool` is available.
+Result: `dist/I2PTorrents/`, zip, AppImage, `.deb`, and `.rpm` when `dpkg-deb` / `rpmbuild` are available.
 
 #### macOS
 
@@ -175,6 +175,18 @@ Release `.app`:
 Result: `dist/I2PTorrents.app` and `I2PTorrents-macOS-<arch>-v<version>.zip` (needs `macdeployqt` from Qt).
 
 Version comes from the `VERSION` file.
+
+### GitHub Releases (CI)
+
+Tagged releases (`v*`, e.g. `v0.2.1`) and manual **Release** workflow runs build packages on GitHub Actions (no Docker):
+
+| Platform | Artifacts |
+| --- | --- |
+| Windows x64 / ARM64 | `.zip` (windeployqt bundle) |
+| Linux x86_64 / aarch64 | `.zip`, `.AppImage`, `.deb`, `.rpm` |
+| macOS Intel / Apple Silicon | `.zip` (`.app` via macdeployqt) |
+
+Push a version tag matching `VERSION`, or run **Actions → Release → Run workflow**. Assets are attached to the GitHub Release on tag pushes.
 
 ### First run
 
@@ -343,6 +355,18 @@ ctest --test-dir build --output-on-failure
 
 Версия берётся из файла `VERSION`.
 
+### Релизы на GitHub (CI)
+
+По тегу `v*` (например `v0.2.1`) и вручную через workflow **Release** собираются пакеты в GitHub Actions (без Docker):
+
+| Платформа | Артефакты |
+| --- | --- |
+| Windows x64 / ARM64 | `.zip` |
+| Linux x86_64 / aarch64 | `.zip`, `.AppImage`, `.deb`, `.rpm` |
+| macOS Intel / Apple Silicon | `.zip` (`.app`) |
+
+Создайте тег по версии из `VERSION` или запустите **Actions → Release → Run workflow**. На push тега файлы попадают в GitHub Release.
+
 ### Первый запуск
 
 1. Запустите i2pd с рабочей секцией `[MyTorrents]`.
@@ -376,11 +400,14 @@ ctest --test-dir build --output-on-failure
 
 <div align="center">
 
-<img src="assets/ton_donation_qr.png" alt="GRAM donation QR" width="200">
+<img src="assets/btc_donation_qr.png" alt="Bitcoin donation QR" width="200">
 
 ```
-UQCsX_UVKylmlxb4dWZlXdmlyRzNm-kzUx7Ld1VQHk1ob0MY
+bc1qfenneg8pt7g42f94uww3l3d7gtw6rl9dd3uslg
 ```
+
+Minimum transaction: **0.0001 BTC** (smaller amounts will not arrive).  
+Минимальная сумма: **0.0001 BTC** (иначе средства не дойдут).
 
 Thank you / Спасибо 🙏
 

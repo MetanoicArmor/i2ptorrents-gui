@@ -1,7 +1,12 @@
+# Keep PR CI focused on compile+test; packaging is Release workflow only.
 name: CI
 
 on:
   push:
+    branches: [master, main]
+    paths-ignore:
+      - "**.md"
+      - ".github/workflows/release.yml"
   pull_request:
 
 permissions:

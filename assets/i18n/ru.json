@@ -6,7 +6,7 @@
   "about_title": "О I2P Torrents",
   "about_body": "Версия {version}\nАвтор: {author}\nЛицензия: {license}",
   "github": "GitHub",
-  "donate_gram": "Донаты: Gram (ex-TON)",
+  "donate_btc": "Донаты: Bitcoin\nМинимальная сумма транзакции: 0.0001 BTC (иначе средства не дойдут).",
   "ok": "OK",
   "section_torrents": "ТОРРЕНТЫ",
   "filter_all": "Все",
