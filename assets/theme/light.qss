@@ -57,6 +57,9 @@ QFrame#SpinRow QSpinBox, QFrame#PathRow QLineEdit {
     background: transparent; border: none; padding: 0px 12px; min-height: 0px;
     selection-background-color: #0a84ff; selection-color: #ffffff;
 }
+QFrame#PathRow QLineEdit#ReadOnlyPath {
+    color: #6e6e73;
+}
 QFrame#SpinRow QSpinBox:focus, QFrame#PathRow QLineEdit:focus { border: none; }
 QWidget#SpinStepColumn {
     background: transparent; border: none;

@@ -33,59 +33,58 @@
 
 A desktop client for i2pd’s torrent tunnel, built with **C++17** and **Qt 6 Widgets**. The UI follows the look of [I2PChat-ng](https://github.com/MetanoicArmor/I2PChat-ng): light and night themes, cards, a compact sidebar, and native behaviour on Linux, Windows, and macOS.
 
-### Features
+### Requirements
 
-- torrent list, progress, piece map, rates, peers, and info hash;
-- file list on torrent click (available before the download finishes), with skip/priority via `torrent-set` when the daemon supports it;
-- simple card view in settings (no piece bar or hash);
-- copy info hash and open the download folder;
-- add `.torrent` files;
-- remove a torrent alone or together with downloaded data;
-- search, filters, UI language (English / Русский), and theme in settings;
-- automatic refresh and connection diagnostics;
-- fallback without RPC: copy the `.torrent` into `torrentsdir`;
-- persist RPC address, folder, and theme.
+- **i2pd** with torrent RPC (openssl branch / build newer than 2.61.0; Boost ≥ 1.81)
+- **Qt 6** (Widgets + Network)
+- **CMake** ≥ 3.16 and a C++17 toolchain (MSVC, Clang, or GCC)
 
-### i2pd setup
+### Install i2pd + torrents tunnel
 
-Add to `tunnels.conf`:
+1. Install [i2pd](https://i2pd.website) for your OS.
+2. Add a torrents section to `tunnels.conf`:
 
 ```ini
 [MyTorrents]
 type=torrents
 trackers=http://tracker2.postman.i2p/announce.php
-torrentsdir=/home/i2pd/torrents
+torrentsdir=/path/to/torrents
 rpcport=9191
 rpcpath=mytorrents
 ```
 
-Do not change the tracker. RPC needs an i2pd build with Boost 1.81 or newer. In the GUI use the usual address:
+Do not change the tracker. Create `torrentsdir` and ensure the i2pd process can write to it.
 
-```text
-http://127.0.0.1:9191/mytorrents
+**Where `tunnels.conf` usually lives**
+
+| OS | Paths (first existing with `type=torrents` wins) |
+| --- | --- |
+| Windows | `%APPDATA%\i2pd\tunnels.conf`, `%LOCALAPPDATA%\i2pd\tunnels.conf` |
+| macOS | `~/Library/Application Support/i2pd/tunnels.conf`, `~/.i2pd/tunnels.conf` |
+| Linux | `/var/lib/i2pd/tunnels.conf`, `~/.i2pd/tunnels.conf`, `/etc/i2pd/tunnels.conf`, `/etc/i2pd/tunnels.d/*.conf` |
+
+3. Restart i2pd.
+4. Check RPC:
+
+```bash
+curl -sS -X POST http://127.0.0.1:9191/mytorrents/rpc/ \
+  -H 'Content-Type: application/json' \
+  -d '{"method":"torrent-get","arguments":{"fields":["id","name"]},"tag":1}'
 ```
 
-The app turns that into the real endpoint `/mytorrents/rpc/`.
-i2pd RPC has no authentication or TLS, so the GUI only allows loopback
-(`localhost`, `127.0.0.0/8`, `::1`).
+The GUI turns `http://127.0.0.1:9191/mytorrents` into `/mytorrents/rpc/`.
+i2pd RPC has no authentication or TLS, so the GUI only allows loopback (`localhost`, `127.0.0.0/8`, `::1`).
 
-#### Linux notes
+#### Linux notes (system i2pd)
 
-On most distros the **system** `i2pd` service runs as user `i2pd`, not as your
-login user. Keep `torrentsdir=/home/i2pd/torrents` (do not point it at
-`~/torrents` or another path under your home directory).
-
-1. Create the directory and give it to the daemon user:
+On most distros the **system** `i2pd` service runs as user `i2pd`. Prefer `torrentsdir=/home/i2pd/torrents` (not a path under your login home).
 
 ```bash
 sudo mkdir -p /home/i2pd/torrents
 sudo chown -R i2pd:i2pd /home/i2pd
 ```
 
-2. Package units often set `ProtectHome=true`, which hides all of `/home/` from
-   the service. Without an exception, i2pd fails to start the `[MyTorrents]`
-   tunnel (`Permission denied` on `torrentsdir`) and RPC port `9191` stays
-   closed. Add a systemd drop-in:
+If the unit sets `ProtectHome=true`, add a drop-in so the service can see that directory:
 
 ```bash
 sudo mkdir -p /etc/systemd/system/i2pd.service.d
@@ -95,96 +94,32 @@ ProtectHome=no
 EOF
 sudo systemctl daemon-reload
 sudo systemctl restart i2pd
+ss -tln | grep 9191
 ```
 
-3. In the GUI settings, set the torrents folder to the same path:
-   `/home/i2pd/torrents`. When RPC is connected, the GUI sends torrents to i2pd
-   over the network and does not need write access to that directory. If you use
-   offline fallback (RPC unavailable), grant your user write access, for example:
+For offline fallback (RPC down), give your user write access, for example:
 
 ```bash
 sudo usermod -aG i2pd "$USER"
 sudo chmod 775 /home/i2pd/torrents
-# log out and back in so the new group membership applies
+# log out and back in
 ```
 
-4. Torrent RPC needs a recent i2pd build (openssl branch; stable 2.61.0 from
-   some repos may not expose it yet). After restart, check:
+If port `9191` stays closed, check `/var/lib/i2pd/i2pd.log` for `Permission denied` / `Can't create torrents RPC server`.
 
-```bash
-ss -tln | grep 9191
-curl -sS -X POST http://127.0.0.1:9191/mytorrents/rpc/ \
-  -H 'Content-Type: application/json' \
-  -d '{"method":"torrent-get","arguments":{"fields":["id","name"]},"tag":1}'
-```
+### Install I2P Torrents GUI
 
-If `9191` is closed, read `/var/lib/i2pd/i2pd.log` for `MyTorrents` /
-`Permission denied` / `Can't create torrents RPC server`.
+Active code is in `cpp/`, `native/`, and `tests/`. The legacy `src/` Rust tree is not built by CMake.
 
+#### Windows
 
-The GUI is a **Qt 6 Widgets** desktop app (same QSS themes). It talks to i2pd over Transmission RPC.
-
-### Source layout
-
-Active code is in `cpp/` (application logic), `native/` (Qt UI chrome), and `tests/`.
-The legacy `src/` Rust tree remains in the repository but is **not** built by CMake.
-
-### Run from source
-
-```bash
-# Qt 6 development packages, then:
-#   macOS: brew install qt@6 cmake
-#   Debian/Ubuntu: sudo apt install qt6-base-dev qt6-tools-dev cmake g++
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-# macOS (Homebrew Qt):
-# cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$(brew --prefix qt@6)"
-cmake --build build
-ctest --test-dir build --output-on-failure
-# Linux without a display (CI, SSH): QT_QPA_PLATFORM=offscreen ctest --test-dir build --output-on-failure
-./build/bin/I2PTorrents
-# Windows (PowerShell) — run once, then cmake in this or a new terminal:
-#   .\scripts\setup-windows-dev.ps1 -InstallQt
-#   cmake -B build -DCMAKE_BUILD_TYPE=Release
-#   cmake --build build --config Release
-#   .\build\bin\Release\I2PTorrents.exe
-```
-
-### Build
-
-The icon source is `image.png`. The scripts produce `icon.png`, a Windows `.ico` when ImageMagick is available, and (on macOS) `.icns`, then pack a release binary.
-
-From the repo root:
-
-```bash
-./build-macos.sh      # macOS
-./build-linux.sh      # Linux
-```
-
-**macOS**
-
-```bash
-./build-macos.sh
-```
-
-Result: `dist/I2PTorrents.app` and `I2PTorrents-macOS-<arch>-v<version>.zip`. Requires `macdeployqt` (`brew install qt@6`).
-
-**Linux**
-
-```bash
-./build-linux.sh
-```
-
-Result: `dist/I2PTorrents/` (launcher + bundled Qt libs), `I2PTorrents-linux-<arch>-v<version>.zip`, and an AppImage in `dist/` when `appimagetool` is available.
-
-**Windows** (PowerShell)
-
-Run from source (once per machine, then in the same or a new terminal):
+Needs Visual Studio C++ Build Tools (MSVC) and Qt 6.
 
 ```powershell
-# auto-install Qt 6.8.3 (MSVC kit) when missing — needs Python 3 + network
+# once per machine — installs Qt 6.8.3 MSVC kit if missing (Python 3 + network)
 .\scripts\setup-windows-dev.ps1 -InstallQt
 
-# or point to an existing kit:
+# or point at an existing kit:
 # .\scripts\setup-windows-dev.ps1 -QtDir 'C:\Qt\6.8.3\msvc2022_64'
 
 cmake -B build -DCMAKE_BUILD_TYPE=Release
@@ -198,13 +133,70 @@ Release package:
 .\build-windows.ps1
 ```
 
-Result: `dist\I2PTorrents\I2PTorrents.exe` and `I2PTorrents-windows-<arch>-v<version>.zip`. Requires Qt 6 and Visual Studio C++ build tools.
+Result: `dist\I2PTorrents\I2PTorrents.exe` and `I2PTorrents-windows-<arch>-v<version>.zip`.
 
-C++17, Qt 6, and CMake are required. The release version comes from the `VERSION` file.
+#### Linux
+
+```bash
+# Debian/Ubuntu
+sudo apt install qt6-base-dev qt6-tools-dev cmake g++
+
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+ctest --test-dir build --output-on-failure
+# headless: QT_QPA_PLATFORM=offscreen ctest --test-dir build --output-on-failure
+./build/bin/I2PTorrents
+```
+
+Release / AppImage:
+
+```bash
+./build-linux.sh
+```
+
+Result: `dist/I2PTorrents/`, zip, and an AppImage in `dist/` when `appimagetool` is available.
+
+#### macOS
+
+```bash
+brew install qt@6 cmake
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$(brew --prefix qt@6)"
+cmake --build build
+ctest --test-dir build --output-on-failure
+./build/bin/I2PTorrents
+```
+
+Release `.app`:
+
+```bash
+./build-macos.sh
+```
+
+Result: `dist/I2PTorrents.app` and `I2PTorrents-macOS-<arch>-v<version>.zip` (needs `macdeployqt` from Qt).
+
+Version comes from the `VERSION` file.
+
+### First run
+
+1. Start i2pd with a working `[MyTorrents]` section.
+2. Open **Settings**:
+   - **RPC address** — editable connection URL for the GUI. `rpcport` / `rpcpath` live in `tunnels.conf`; if your settings still use the default URL, the GUI can fill it from that file.
+   - **Torrents folder** — read-only, taken from `torrentsdir` in `tunnels.conf`. **Browse** opens the folder in the OS file manager; change the path only in i2pd’s config, then restart i2pd.
+3. Offline fallback (RPC unavailable): the GUI may copy a `.torrent` into the saved folder path — that still needs write permission on `torrentsdir`.
+
+### Features
+
+- torrent list, progress, piece map, rates, peers, and info hash;
+- file list on torrent click (available before the download finishes);
+- simple card view in settings;
+- copy info hash and open the download folder;
+- add `.torrent` files; remove with or without data;
+- search, filters, language (English / Русский), theme;
+- automatic refresh and connection diagnostics.
 
 ### i2pd RPC limits
 
-Current i2pd exposes `torrent-add`, `torrent-get`, and `torrent-remove`. On the openssl branch, `torrent-get` returns `files`, `wanted`, `priorities`, `percentDone`, `eta`, `trackers`, and peer `clientName`/`progress` (BEP10). The GUI uses those fields for card progress/ETA, the Trackers dialog (announce list from the torrents tunnel), and peer client/progress columns. `wanted`/`priorities` are still stubs, and `torrent-set` is not implemented yet, so skip/priority in the GUI will show a notice until the daemon accepts it. Pause, resume, tracker edits, speed limits, and magnet links are not available. Add a ready `.torrent` file.
+Current i2pd exposes `torrent-add`, `torrent-get`, and `torrent-remove`. On the openssl branch, `torrent-get` returns `files`, `wanted`, `priorities`, `percentDone`, `eta`, `trackers`, and peer `clientName`/`progress` (BEP10). `wanted`/`priorities` are still stubs, and `torrent-set` is not implemented yet. Pause, resume, tracker edits, speed limits, and magnet links are not available. Add a ready `.torrent` file.
 
 ### License
 
@@ -214,62 +206,60 @@ Current i2pd exposes `torrent-add`, `torrent-get`, and `torrent-remove`. On the 
 
 ## Русский
 
-Кроссплатформенный настольный клиент для встроенного torrent-клиента i2pd на **C++17** и **Qt 6 Widgets**. Интерфейс выполнен в визуальном стиле [I2PChat-ng](https://github.com/MetanoicArmor/I2PChat-ng): светлая и ночная темы, карточки, компактная боковая панель и нативное поведение на Linux, Windows и macOS.
+Кроссплатформенный настольный клиент для встроенного torrent-клиента i2pd на **C++17** и **Qt 6 Widgets**. Интерфейс в стиле [I2PChat-ng](https://github.com/MetanoicArmor/I2PChat-ng): светлая и ночная темы, карточки, компактная боковая панель.
 
-### Возможности
+### Требования
 
-- список торрентов, прогресс, карта кусков, скорости, пиры и info hash;
-- список файлов по клику на карточку (до полной загрузки), с попыткой задать пропуск и приоритет через `torrent-set`;
-- упрощённый вид карточек в настройках (без полосы кусков и хеша);
-- копирование info hash и открытие папки загрузки;
-- добавление `.torrent`-файлов;
-- удаление торрента отдельно или вместе с загруженными данными;
-- поиск, фильтры, язык интерфейса (English / Русский) и тема в настройках;
-- автоматическое обновление и диагностика соединения;
-- fallback без RPC: копирование `.torrent` в `torrentsdir`;
-- сохранение адреса RPC, каталога и темы.
+- **i2pd** с torrent RPC (ветка openssl / сборка новее 2.61.0; Boost ≥ 1.81)
+- **Qt 6** (Widgets + Network)
+- **CMake** ≥ 3.16 и toolchain C++17 (MSVC, Clang или GCC)
 
-### Настройка i2pd
+### Установка i2pd и torrents-туннеля
 
-Добавьте в `tunnels.conf`:
+1. Установите [i2pd](https://i2pd.website).
+2. Добавьте секцию в `tunnels.conf`:
 
 ```ini
 [MyTorrents]
 type=torrents
 trackers=http://tracker2.postman.i2p/announce.php
-torrentsdir=/home/i2pd/torrents
+torrentsdir=/path/to/torrents
 rpcport=9191
 rpcpath=mytorrents
 ```
 
-Трекер менять не следует. RPC требует сборку i2pd с Boost 1.81 или новее. В GUI укажите привычный адрес:
+Трекер менять не следует. Создайте `torrentsdir` и дайте процессу i2pd право записи.
 
-```text
-http://127.0.0.1:9191/mytorrents
+**Где обычно лежит `tunnels.conf`**
+
+| ОС | Пути (берётся первый существующий с `type=torrents`) |
+| --- | --- |
+| Windows | `%APPDATA%\i2pd\tunnels.conf`, `%LOCALAPPDATA%\i2pd\tunnels.conf` |
+| macOS | `~/Library/Application Support/i2pd/tunnels.conf`, `~/.i2pd/tunnels.conf` |
+| Linux | `/var/lib/i2pd/tunnels.conf`, `~/.i2pd/tunnels.conf`, `/etc/i2pd/tunnels.conf`, `/etc/i2pd/tunnels.d/*.conf` |
+
+3. Перезапустите i2pd.
+4. Проверьте RPC:
+
+```bash
+curl -sS -X POST http://127.0.0.1:9191/mytorrents/rpc/ \
+  -H 'Content-Type: application/json' \
+  -d '{"method":"torrent-get","arguments":{"fields":["id","name"]},"tag":1}'
 ```
 
-Приложение само преобразует его в фактический endpoint `/mytorrents/rpc/`.
-Поскольку RPC i2pd не поддерживает авторизацию и TLS, GUI намеренно разрешает
-подключение только к loopback-адресам (`localhost`, `127.0.0.0/8`, `::1`).
+GUI превращает `http://127.0.0.1:9191/mytorrents` в `/mytorrents/rpc/`.
+Без авторизации и TLS разрешён только loopback.
 
-#### Заметки для Linux
+#### Заметки для Linux (системный i2pd)
 
-На большинстве дистрибутивов **системный** сервис `i2pd` работает от
-пользователя `i2pd`, а не от вашего аккаунта. Используйте
-`torrentsdir=/home/i2pd/torrents` (не указывайте `~/torrents` и другие пути
-в вашем домашнем каталоге).
-
-1. Создайте каталог и передайте его пользователю демона:
+Сервис обычно работает от пользователя `i2pd`. Предпочтительно `torrentsdir=/home/i2pd/torrents`.
 
 ```bash
 sudo mkdir -p /home/i2pd/torrents
 sudo chown -R i2pd:i2pd /home/i2pd
 ```
 
-2. В пакетных unit-файлах часто включён `ProtectHome=true`, из‑за чего сервис
-   не видит `/home/`. Тогда туннель `[MyTorrents]` не поднимается
-   (`Permission denied` на `torrentsdir`), а RPC-порт `9191` остаётся закрытым.
-   Добавьте drop-in для systemd:
+При `ProtectHome=true` добавьте drop-in:
 
 ```bash
 sudo mkdir -p /etc/systemd/system/i2pd.service.d
@@ -279,118 +269,100 @@ ProtectHome=no
 EOF
 sudo systemctl daemon-reload
 sudo systemctl restart i2pd
+ss -tln | grep 9191
 ```
 
-3. В настройках GUI укажите тот же каталог: `/home/i2pd/torrents`. При
-   подключённом RPC GUI отправляет торренты в i2pd по сети и не требует прав
-   записи в этот каталог. Для offline-fallback (когда RPC недоступен) выдайте
-   своему пользователю право записи, например:
+Для offline-fallback (RPC недоступен):
 
 ```bash
 sudo usermod -aG i2pd "$USER"
 sudo chmod 775 /home/i2pd/torrents
-# перелогиньтесь, чтобы применилась новая группа
+# перелогиньтесь
 ```
 
-4. Torrent RPC нужна свежая сборка i2pd (ветка openssl; стабильный 2.61.0 из
-   некоторых репозиториев может ещё не поднимать RPC). После перезапуска
-   проверьте:
+Если `9191` закрыт — смотрите `/var/lib/i2pd/i2pd.log`.
 
-```bash
-ss -tln | grep 9191
-curl -sS -X POST http://127.0.0.1:9191/mytorrents/rpc/ \
-  -H 'Content-Type: application/json' \
-  -d '{"method":"torrent-get","arguments":{"fields":["id","name"]},"tag":1}'
-```
+### Установка I2P Torrents GUI
 
-Если `9191` закрыт, смотрите `/var/lib/i2pd/i2pd.log` на сообщения про
-`MyTorrents`, `Permission denied` или `Can't create torrents RPC server`.
+Активный код — в `cpp/`, `native/`, `tests/`. Дерево Rust в `src/` CMake не собирает.
 
-### Запуск из исходников
+#### Windows
 
-GUI — это настольное приложение на **Qt 6 Widgets** (те же QSS-темы). Оно ходит в i2pd по Transmission RPC.
-
-### Структура исходников
-
-Активный код — в `cpp/` (логика приложения), `native/` (Qt UI chrome) и `tests/`.
-Устаревшее дерево Rust в `src/` остаётся в репозитории, но **не** входит в сборку CMake.
-
-### Запуск из исходников
-
-```bash
-# пакеты Qt 6, затем:
-#   macOS: brew install qt@6 cmake
-#   Debian/Ubuntu: sudo apt install qt6-base-dev qt6-tools-dev cmake g++
-cmake -B build -DCMAKE_BUILD_TYPE=Release
-# macOS (Homebrew Qt):
-# cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$(brew --prefix qt@6)"
-cmake --build build
-ctest --test-dir build --output-on-failure
-# Linux без дисплея (CI, SSH): QT_QPA_PLATFORM=offscreen ctest --test-dir build --output-on-failure
-./build/bin/I2PTorrents
-# Windows (PowerShell) — один раз, затем cmake в этом или новом терминале:
-#   .\scripts\setup-windows-dev.ps1 -InstallQt
-#   cmake -B build -DCMAKE_BUILD_TYPE=Release
-#   cmake --build build --config Release
-#   .\build\bin\Release\I2PTorrents.exe
-```
-
-### Сборка
-
-Исходник иконки — `image.png`. Скрипты собирают `icon.png`, Windows `.ico` при наличии ImageMagick и (на macOS) `.icns`, затем упаковывают release-бинарник.
-
-Из корня репозитория:
-
-```bash
-./build-macos.sh      # macOS
-./build-linux.sh      # Linux
-```
-
-**macOS**
-
-```bash
-./build-macos.sh
-```
-
-Результат: `dist/I2PTorrents.app` и `I2PTorrents-macOS-<arch>-v<version>.zip`. Нужен `macdeployqt` (`brew install qt@6`).
-
-**Linux**
-
-```bash
-./build-linux.sh
-```
-
-Результат: `dist/I2PTorrents/` (лаунчер и Qt-библиотеки), `I2PTorrents-linux-<arch>-v<version>.zip` и при наличии `appimagetool` — AppImage в `dist/`.
-
-**Windows** (PowerShell)
-
-Запуск из исходников (один раз на машине, затем в этом или новом терминале):
+Нужны Visual Studio C++ Build Tools (MSVC) и Qt 6.
 
 ```powershell
-# автоустановка Qt 6.8.3 (MSVC kit), если ещё нет — нужны Python 3 и сеть
 .\scripts\setup-windows-dev.ps1 -InstallQt
-
-# или указать уже установленный kit:
-# .\scripts\setup-windows-dev.ps1 -QtDir 'C:\Qt\6.8.3\msvc2022_64'
+# или: .\scripts\setup-windows-dev.ps1 -QtDir 'C:\Qt\6.8.3\msvc2022_64'
 
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build --config Release
 .\build\bin\Release\I2PTorrents.exe
 ```
 
-Сборка релиза:
+Релиз:
 
 ```powershell
 .\build-windows.ps1
 ```
 
-Результат: `dist\I2PTorrents\I2PTorrents.exe` и `I2PTorrents-windows-<arch>-v<version>.zip`. Нужны Qt 6 и Visual Studio C++ build tools.
+Результат: `dist\I2PTorrents\I2PTorrents.exe` и zip.
 
-Нужны C++17, Qt 6 и CMake. Версия релиза берётся из файла `VERSION`.
+#### Linux
+
+```bash
+sudo apt install qt6-base-dev qt6-tools-dev cmake g++
+
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+ctest --test-dir build --output-on-failure
+./build/bin/I2PTorrents
+```
+
+Релиз / AppImage:
+
+```bash
+./build-linux.sh
+```
+
+#### macOS
+
+```bash
+brew install qt@6 cmake
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$(brew --prefix qt@6)"
+cmake --build build
+ctest --test-dir build --output-on-failure
+./build/bin/I2PTorrents
+```
+
+Релиз `.app`:
+
+```bash
+./build-macos.sh
+```
+
+Версия берётся из файла `VERSION`.
+
+### Первый запуск
+
+1. Запустите i2pd с рабочей секцией `[MyTorrents]`.
+2. Откройте **Настройки**:
+   - **Адрес RPC** — редактируемый URL для GUI. `rpcport` / `rpcpath` задаются в `tunnels.conf`; при дефолтном URL GUI может подставить значение из конфига.
+   - **Каталог торрентов** — только чтение из `torrentsdir`. **Обзор** открывает папку в проводнике ОС; путь меняйте только в конфиге i2pd и перезапускайте демон.
+3. Offline-fallback: при недоступном RPC GUI может копировать `.torrent` в сохранённый путь — нужны права записи на `torrentsdir`.
+
+### Возможности
+
+- список торрентов, прогресс, карта кусков, скорости, пиры и info hash;
+- список файлов по клику на карточку;
+- упрощённый вид карточек в настройках;
+- копирование info hash и открытие папки загрузки;
+- добавление `.torrent`; удаление с данными или без;
+- поиск, фильтры, язык, тема;
+- автообновление и диагностика соединения.
 
 ### Ограничения i2pd RPC
 
-Текущая реализация i2pd предоставляет `torrent-add`, `torrent-get` и `torrent-remove`. В ветке openssl `torrent-get` отдаёт `files`, `wanted`, `priorities`, `percentDone`, `eta`, `trackers` и у пиров `clientName`/`progress` (BEP10). GUI использует их для прогресса/ETA на карточке, диалога трекеров (announce из torrents-туннеля) и колонок клиента/прогресса пиров. `wanted`/`priorities` пока заглушки, а `torrent-set` ещё нет — пропуск и приоритет в GUI покажут предупреждение, пока демон их не примет. Пауза, возобновление, изменение трекеров, лимитов скорости и magnet-ссылки пока не поддерживаются. Добавляйте готовый `.torrent`-файл.
+Доступны `torrent-add`, `torrent-get`, `torrent-remove`. В ветке openssl — `files`, `wanted`, `priorities`, `percentDone`, `eta`, `trackers`, у пиров `clientName`/`progress`. `torrent-set`, пауза, resume, правка трекеров, лимиты и magnet пока недоступны. Добавляйте готовый `.torrent`.
 
 ### Лицензия
 
