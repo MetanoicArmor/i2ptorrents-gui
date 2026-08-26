@@ -4048,14 +4048,18 @@ int i2p_settings_exec(void *parent, const i2p_settings_in *in) {
     layout->setContentsMargins(margins);
     layout->setSpacing(10);
 
-    layout->addWidget(new QLabel(qstr(in->rpc_label), &dialog));
+    auto *rpc_label = new QLabel(qstr(in->rpc_label), &dialog);
+    rpc_label->setToolTip(qstr(in->rpc_tip));
+    layout->addWidget(rpc_label);
     auto *rpc = new QLineEdit(qstr(in->rpc_value), &dialog);
     rpc->setPlaceholderText(qstr(in->rpc_placeholder));
     rpc->setToolTip(qstr(in->rpc_tip));
     polish_line_edit(rpc);
     layout->addWidget(rpc);
 
-    layout->addWidget(new QLabel(qstr(in->dir_label), &dialog));
+    auto *dir_label = new QLabel(qstr(in->dir_label), &dialog);
+    dir_label->setToolTip(qstr(in->dir_tip));
+    layout->addWidget(dir_label);
     auto *dir_row = new QWidget(&dialog);
     dir_row->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     dir_row->setFixedHeight(DialogMetrics::kControlMinH);
@@ -4074,6 +4078,10 @@ int i2p_settings_exec(void *parent, const i2p_settings_in *in) {
     path_layout->setContentsMargins(0, 0, 0, 0);
     path_layout->setSpacing(0);
     auto *dir = new QLineEdit(qstr(in->dir_value), path_row);
+    dir->setObjectName(QStringLiteral("ReadOnlyPath"));
+    dir->setReadOnly(true);
+    dir->setFocusPolicy(Qt::NoFocus);
+    dir->setToolTip(qstr(in->dir_tip));
     dir->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     dir->setTextMargins(4, 0, 4, 0);
     dir->setFrame(false);
@@ -4087,12 +4095,14 @@ int i2p_settings_exec(void *parent, const i2p_settings_in *in) {
     auto *browse = new QPushButton(qstr(in->browse), dir_row);
     lock_dialog_control(browse);
     browse->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    browse->setToolTip(qstr(in->dir_tip));
     QObject::connect(browse, &QPushButton::clicked, &dialog, [dir, &dialog, in] {
-        const QString path =
-            QFileDialog::getExistingDirectory(&dialog, qstr(in->dir_label), dir->text());
-        if (!path.isEmpty()) {
-            dir->setText(path);
+        const QString path = dir->text().trimmed();
+        if (path.isEmpty() || !QFileInfo(path).exists()) {
+            QMessageBox::information(&dialog, qstr(in->dir_label), qstr(in->open_dir_missing));
+            return;
         }
+        QDesktopServices::openUrl(QUrl::fromLocalFile(path));
     });
     dir_layout->addWidget(browse, 0, Qt::AlignTop);
     layout->addWidget(dir_row);
@@ -4514,11 +4524,14 @@ int layout_peers_table(QTableWidget *table, QVBoxLayout *layout, int dialog_w, i
         peers_table_content_width(table, 3, metrics, QStringLiteral("999.9 KiB/s"), cell_pad);
     int col_flags =
         peers_table_content_width(table, 4, metrics, QStringLiteral("IDU?"), cell_pad);
+    int col_progress =
+        peers_table_content_width(table, 5, metrics, QStringLiteral("100%"), cell_pad);
     col_down = std::max(col_down, 96);
     col_up = std::max(col_up, 96);
     col_flags = std::max(col_flags, 40);
+    col_progress = std::max(col_progress, 56);
 
-    const int content_w = col_address + col_client + col_down + col_up + col_flags;
+    const int content_w = col_address + col_client + col_down + col_up + col_flags + col_progress;
 
 #ifndef Q_OS_WIN
     const int v_scrollbar_w = table->style()->pixelMetric(QStyle::PM_ScrollBarExtent, nullptr, table);
@@ -4548,6 +4561,7 @@ int layout_peers_table(QTableWidget *table, QVBoxLayout *layout, int dialog_w, i
     table->setColumnWidth(2, col_down);
     table->setColumnWidth(3, col_up);
     table->setColumnWidth(4, col_flags);
+    table->setColumnWidth(5, col_progress);
 
     const int table_h = need_v_scroll ? max_table_h : content_table_h;
     table->setFixedSize(inner_w, table_h);
@@ -4557,7 +4571,8 @@ int layout_peers_table(QTableWidget *table, QVBoxLayout *layout, int dialog_w, i
     table->setVerticalScrollBarPolicy(need_v_scroll ? Qt::ScrollBarAsNeeded : Qt::ScrollBarAlwaysOff);
     if (QWidget *parent = table->parentWidget()) {
         if (parent->objectName() == QLatin1String("FilesTablePane") ||
-            parent->objectName() == QLatin1String("PeersTablePane")) {
+            parent->objectName() == QLatin1String("PeersTablePane") ||
+            parent->objectName() == QLatin1String("TrackersTablePane")) {
             parent->setFixedSize(inner_w, table_h);
             parent->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
             static_cast<FilesTablePane *>(parent)->applyClip();
@@ -4617,11 +4632,11 @@ void i2p_peers_exec(void *parent, const i2p_peers_in *in) {
         pane_layout->setContentsMargins(0, 0, 0, 0);
         pane_layout->setSpacing(0);
 
-        auto *table = new QTableWidget(in->peer_count, 5, pane);
+        auto *table = new QTableWidget(in->peer_count, 6, pane);
         table->setObjectName(QStringLiteral("PeersTable"));
         style_peers_table(table, &dialog);
         table->setHorizontalHeaderLabels({qstr(in->col_address), qstr(in->col_client), qstr(in->col_down),
-                                          qstr(in->col_up), qstr(in->col_flags)});
+                                          qstr(in->col_up), qstr(in->col_flags), qstr(in->col_progress)});
         table->verticalHeader()->setVisible(false);
         table->setShowGrid(false);
         table->setSelectionMode(QAbstractItemView::NoSelection);
@@ -4629,7 +4644,7 @@ void i2p_peers_exec(void *parent, const i2p_peers_in *in) {
         table->setEditTriggers(QAbstractItemView::NoEditTriggers);
         table->horizontalHeader()->setMinimumSectionSize(28);
         table->horizontalHeader()->setStretchLastSection(false);
-        for (int column = 0; column < 5; ++column) {
+        for (int column = 0; column < 6; ++column) {
             table->horizontalHeader()->setSectionResizeMode(column, QHeaderView::Fixed);
         }
         if (QTableWidgetItem *down_hdr = table->horizontalHeaderItem(2)) {
@@ -4640,6 +4655,9 @@ void i2p_peers_exec(void *parent, const i2p_peers_in *in) {
         }
         if (QTableWidgetItem *flags_hdr = table->horizontalHeaderItem(4)) {
             flags_hdr->setTextAlignment(Qt::AlignHCenter | Qt::AlignVCenter);
+        }
+        if (QTableWidgetItem *progress_hdr = table->horizontalHeaderItem(5)) {
+            progress_hdr->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
         }
 
         const QFont hash_font = QFontDatabase::systemFont(QFontDatabase::FixedFont);
@@ -4680,6 +4698,14 @@ void i2p_peers_exec(void *parent, const i2p_peers_in *in) {
                 flags_item->setToolTip(flags);
             }
             table->setItem(row, 4, flags_item);
+
+            const QString progress = qstr(peer.progress);
+            auto *progress_item = new QTableWidgetItem(progress.isEmpty() ? QStringLiteral("—") : progress);
+            progress_item->setTextAlignment(Qt::AlignRight | Qt::AlignVCenter);
+            if (!progress.isEmpty()) {
+                progress_item->setToolTip(progress);
+            }
+            table->setItem(row, 5, progress_item);
         }
 
         QObject::connect(table, &QTableWidget::cellDoubleClicked, &dialog,
@@ -4722,6 +4748,143 @@ void i2p_peers_exec(void *parent, const i2p_peers_in *in) {
                 }
                 layout_peers_table(peers_table, layout, dialog_w, DialogMetrics::kFilesH, note,
                                    dialog_buttons_row_height(close));
+            }
+            layout->activate();
+            const int height = std::min(DialogMetrics::kFilesH, dialog.sizeHint().height());
+            dialog.setFixedSize(dialog_w, std::max(height, 160));
+        });
+    if (g_tip) {
+        g_tip->forceHide();
+    }
+}
+
+void i2p_trackers_exec(void *parent, const i2p_trackers_in *in) {
+    if (in == nullptr) {
+        return;
+    }
+    QWidget *host = as_widget(parent);
+    QDialog dialog(nullptr, hosted_dialog_flags());
+    prepare_hosted_dialog(&dialog);
+#ifdef Q_OS_MAC
+    dialog.setProperty("i2pOpaqueChrome", true);
+#endif
+    dialog.setWindowTitle(qstr(in->title));
+    dialog.setFixedWidth(DialogMetrics::kPeersW);
+    if (in->stylesheet && in->stylesheet[0] != '\0') {
+        dialog.setStyleSheet(qstr(in->stylesheet));
+    }
+    const bool night = stylesheet_is_night(dialog.styleSheet());
+#ifdef Q_OS_MAC
+    dialog.setStyleSheet(dialog.styleSheet() +
+                         (night ? QStringLiteral("\nQDialog { background: #1c1c1e; }")
+                                : QStringLiteral("\nQDialog { background: #ffffff; }")));
+#endif
+    const QMargins margins = DialogMetrics::dialog_margins(16, 16);
+    const int inner_w = DialogMetrics::inner_w(DialogMetrics::kPeersW, margins);
+    auto *layout = new QVBoxLayout(&dialog);
+    layout->setContentsMargins(margins);
+    layout->setSpacing(10);
+    layout->setSizeConstraint(QLayout::SetFixedSize);
+
+    auto *note = new QLabel(qstr(in->note), &dialog);
+    note->setObjectName(QStringLiteral("Secondary"));
+    note->setWordWrap(true);
+    layout->addWidget(note);
+
+    QTableWidget *trackers_table = nullptr;
+    if (in->tracker_count <= 0) {
+        auto *empty = new QLabel(qstr(in->empty), &dialog);
+        empty->setObjectName(QStringLiteral("Secondary"));
+        empty->setWordWrap(true);
+        layout->addWidget(empty);
+    } else {
+        auto *pane = new FilesTablePane(&dialog, night);
+        pane->setObjectName(QStringLiteral("TrackersTablePane"));
+        auto *pane_layout = new QVBoxLayout(pane);
+        pane_layout->setContentsMargins(0, 0, 0, 0);
+        pane_layout->setSpacing(0);
+
+        auto *table = new QTableWidget(in->tracker_count, 2, pane);
+        table->setObjectName(QStringLiteral("TrackersTable"));
+        style_peers_table(table, &dialog);
+        table->setHorizontalHeaderLabels({qstr(in->col_announce), qstr(in->col_tier)});
+        table->verticalHeader()->setVisible(false);
+        table->setShowGrid(false);
+        table->setSelectionMode(QAbstractItemView::NoSelection);
+        table->setFocusPolicy(Qt::NoFocus);
+        table->setEditTriggers(QAbstractItemView::NoEditTriggers);
+        table->horizontalHeader()->setMinimumSectionSize(28);
+        table->horizontalHeader()->setStretchLastSection(true);
+        table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
+        table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Fixed);
+        if (QTableWidgetItem *tier_hdr = table->horizontalHeaderItem(1)) {
+            tier_hdr->setTextAlignment(Qt::AlignHCenter | Qt::AlignVCenter);
+        }
+
+        for (int row = 0; row < in->tracker_count; ++row) {
+            const i2p_tracker_row &tracker = in->trackers[row];
+            const QString announce = qstr(tracker.announce);
+            auto *announce_item = new QTableWidgetItem(announce);
+            announce_item->setToolTip(announce);
+            table->setItem(row, 0, announce_item);
+
+            const QString tier = qstr(tracker.tier);
+            auto *tier_item = new QTableWidgetItem(tier);
+            tier_item->setTextAlignment(Qt::AlignHCenter | Qt::AlignVCenter);
+            table->setItem(row, 1, tier_item);
+        }
+
+        new TableItemTooltipFilter(table);
+        trackers_table = table;
+        pane_layout->addWidget(table);
+        layout->addWidget(pane);
+    }
+
+    auto *close = new QPushButton(qstr(in->close), &dialog);
+    close->setObjectName(QStringLiteral("Primary"));
+    close->setDefault(true);
+    QObject::connect(close, &QPushButton::clicked, &dialog, [&dialog] {
+        if (g_tip) {
+            g_tip->forceHide();
+        }
+        QTimer::singleShot(0, &dialog, &QDialog::accept);
+    });
+    add_dialog_buttons(layout, {close});
+
+    exec_app_modal_dialog(
+        &dialog, host, inner_w, QSize(DialogMetrics::kPeersW, 0),
+        [&] {
+            const int dialog_w = DialogMetrics::kPeersW;
+            if (trackers_table != nullptr) {
+                QHeaderView *header = trackers_table->horizontalHeader();
+                header->setFixedHeight(std::max(DialogMetrics::kFilesHeaderMinH, header->sizeHint().height()));
+                const int header_h = header->height();
+                int rows_h = 0;
+                for (int row = 0; row < trackers_table->rowCount(); ++row) {
+                    trackers_table->setRowHeight(row, std::max(28, trackers_table->rowHeight(row)));
+                    rows_h += trackers_table->rowHeight(row);
+                }
+                note->setFixedWidth(inner_w);
+                int note_h = note->heightForWidth(inner_w);
+                if (note_h <= 0) {
+                    note_h = wrapped_label_height(note, inner_w);
+                }
+                if (note_h > 0) {
+                    note->setFixedHeight(note_h);
+                }
+                const int chrome_h = margins.top() + margins.bottom() + note_h + dialog_buttons_row_height(close) +
+                                     layout->spacing() * 2;
+                const int max_table_h = std::max(120, DialogMetrics::kFilesH - chrome_h);
+                const int content_table_h = header_h + rows_h;
+                const int table_h = std::min(content_table_h, max_table_h);
+                trackers_table->setColumnWidth(1, 64);
+                trackers_table->setFixedSize(inner_w, table_h);
+                if (QWidget *pane = trackers_table->parentWidget()) {
+                    pane->setFixedSize(inner_w, table_h);
+                    if (pane->objectName() == QLatin1String("TrackersTablePane")) {
+                        static_cast<FilesTablePane *>(pane)->applyClip();
+                    }
+                }
             }
             layout->activate();
             const int height = std::min(DialogMetrics::kFilesH, dialog.sizeHint().height());

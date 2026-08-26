@@ -421,6 +421,15 @@ QWidget *MainWindow::makeCard(const Torrent &torrent)
                              details);
     rates->setObjectName(QStringLiteral("Secondary"));
     detailRow->addWidget(rates);
+    if (torrent.status == TorrentStatus::Downloading && torrent.eta >= 0) {
+        const QString etaText = formatEta(torrent.eta);
+        if (!etaText.isEmpty()) {
+            detailRow->addStretch();
+            auto *eta = new QLabel(trArgs(QStringLiteral("eta"), {{QStringLiteral("value"), etaText}}), details);
+            eta->setObjectName(QStringLiteral("Secondary"));
+            detailRow->addWidget(eta);
+        }
+    }
     detailRow->addStretch();
     auto *peers = new QLabel(trArgs(QStringLiteral("peers"),
                                     {{QStringLiteral("down"), QString::number(torrent.peersSendingToUs)},
@@ -468,6 +477,9 @@ void MainWindow::showActions(const Torrent &torrent, quintptr morePtr)
         });
         popupAddAction(popup, trKey(QStringLiteral("peers_show")), true, [this, torrent]() {
             defer([this, torrent]() { showPeers(torrent.id, torrent.name); });
+        });
+        popupAddAction(popup, trKey(QStringLiteral("trackers_show")), true, [this, torrent]() {
+            defer([this, torrent]() { showTrackers(torrent.id, torrent.name); });
         });
         popupAddAction(popup,
                          trKey(QStringLiteral("copy_hash")),
@@ -528,6 +540,23 @@ void MainWindow::showPeers(qint64 torrentId, const QString &name)
         return;
     }
     peersExec(this, stylesheet(settings_.theme), title, peers);
+}
+
+void MainWindow::showTrackers(qint64 torrentId, const QString &name)
+{
+    QString error;
+    std::optional<QString> endpoint = normalizeRpcUrl(settings_.rpcUrl, &error);
+    QVector<Tracker> trackers;
+    if (endpoint.has_value()) {
+        RpcClient client(*endpoint);
+        trackers = client.getTorrentTrackers(torrentId, &error);
+    }
+    const QString title = trArgs(QStringLiteral("trackers_title"), {{QStringLiteral("name"), name}});
+    if (!error.isEmpty() && trackers.isEmpty()) {
+        QMessageBox::warning(this, title, error);
+        return;
+    }
+    trackersExec(this, stylesheet(settings_.theme), title, trackers);
 }
 
 void MainWindow::confirmRemoveTorrent(qint64 torrentId, const QString &name)

@@ -19,6 +19,7 @@ set(I2P_CORE_SOURCES
     cpp/i18n.cpp
     cpp/theme.cpp
     cpp/config.cpp
+    cpp/i2pd_tunnels.cpp
     cpp/models.cpp
     cpp/piece_map.cpp
     cpp/rpc.cpp
@@ -83,6 +84,7 @@ qt_add_executable(i2ptorrents-tests
     tests/test_i18n.cpp
     tests/test_theme.cpp
     tests/test_piece_map.cpp
+    tests/test_i2pd_tunnels.cpp
     ${I2P_CORE_SOURCES}
     assets/resources.qrc
 )

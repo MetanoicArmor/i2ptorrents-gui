@@ -71,13 +71,13 @@ QFrame#TorrentCard, QFrame#SummaryCard, QWidget#TorrentCard, QWidget#SummaryCard
     border: none;
     border-radius: 10px;
 }
-QWidget#FilesTablePane, QWidget#PeersTablePane {
+QWidget#FilesTablePane, QWidget#PeersTablePane, QWidget#TrackersTablePane {
     background: transparent;
     border: none;
     border-radius: 12px;
 }
 QWidget#FilesTableOverlay { background: transparent; border: none; }
-QTableWidget#FilesTable, QTableWidget#PeersTable {
+QTableWidget#FilesTable, QTableWidget#PeersTable, QTableWidget#TrackersTable {
     background: transparent;
     border: none;
     border-radius: 12px;
@@ -143,13 +143,13 @@ QFrame#TorrentCard, QFrame#SummaryCard, QWidget#TorrentCard, QWidget#SummaryCard
     border: none;
     border-radius: 10px;
 }
-QWidget#FilesTablePane, QWidget#PeersTablePane {
+QWidget#FilesTablePane, QWidget#PeersTablePane, QWidget#TrackersTablePane {
     background: transparent;
     border: none;
     border-radius: 12px;
 }
 QWidget#FilesTableOverlay { background: transparent; border: none; }
-QTableWidget#FilesTable, QTableWidget#PeersTable {
+QTableWidget#FilesTable, QTableWidget#PeersTable, QTableWidget#TrackersTable {
     background: transparent;
     border: none;
     border-radius: 12px;
@@ -236,11 +236,11 @@ QFrame#Surface, QWidget#Surface {
 }
 QWidget#PaneSplit { background: rgba(255, 255, 255, 0.10); }
 QFrame#TorrentCard, QWidget#TorrentCard { background: transparent; border: none; }
-QWidget#FilesTablePane, QWidget#PeersTablePane { background: transparent; border: none; border-radius: 0px; }
+QWidget#FilesTablePane, QWidget#PeersTablePane, QWidget#TrackersTablePane { background: transparent; border: none; border-radius: 0px; }
 QWidget#FilesTableOverlay { background: transparent; border: none; }
-QTableWidget#FilesTable, QTableWidget#PeersTable { border-radius: 0px; outline: none; }
-QTableWidget#FilesTable::viewport, QTableWidget#PeersTable::viewport { border-radius: 0px; background: transparent; }
-QTableWidget#FilesTable QHeaderView::section, QTableWidget#PeersTable QHeaderView::section { border-radius: 0px; }
+QTableWidget#FilesTable, QTableWidget#PeersTable, QTableWidget#TrackersTable { border-radius: 0px; outline: none; }
+QTableWidget#FilesTable::viewport, QTableWidget#PeersTable::viewport, QTableWidget#TrackersTable::viewport { border-radius: 0px; background: transparent; }
+QTableWidget#FilesTable QHeaderView::section, QTableWidget#PeersTable QHeaderView::section, QTableWidget#TrackersTable QHeaderView::section { border-radius: 0px; }
 )");
     }
     return QStringLiteral(R"(
@@ -256,11 +256,11 @@ QFrame#Surface, QWidget#Surface {
 }
 QWidget#PaneSplit { background: rgba(0, 0, 0, 0.10); }
 QFrame#TorrentCard, QWidget#TorrentCard { background: transparent; border: none; }
-QWidget#FilesTablePane, QWidget#PeersTablePane { background: transparent; border: none; border-radius: 0px; }
+QWidget#FilesTablePane, QWidget#PeersTablePane, QWidget#TrackersTablePane { background: transparent; border: none; border-radius: 0px; }
 QWidget#FilesTableOverlay { background: transparent; border: none; }
-QTableWidget#FilesTable, QTableWidget#PeersTable { border-radius: 0px; outline: none; }
-QTableWidget#FilesTable::viewport, QTableWidget#PeersTable::viewport { border-radius: 0px; background: transparent; }
-QTableWidget#FilesTable QHeaderView::section, QTableWidget#PeersTable QHeaderView::section { border-radius: 0px; }
+QTableWidget#FilesTable, QTableWidget#PeersTable, QTableWidget#TrackersTable { border-radius: 0px; outline: none; }
+QTableWidget#FilesTable::viewport, QTableWidget#PeersTable::viewport, QTableWidget#TrackersTable::viewport { border-radius: 0px; background: transparent; }
+QTableWidget#FilesTable QHeaderView::section, QTableWidget#PeersTable QHeaderView::section, QTableWidget#TrackersTable QHeaderView::section { border-radius: 0px; }
 )");
 }
 

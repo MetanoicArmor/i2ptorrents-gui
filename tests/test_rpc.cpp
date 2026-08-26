@@ -20,6 +20,8 @@ private slots:
     void getTorrentPeersRequestsOneTorrent();
     void getTorrentPeersParsesNestedJsonRpc2();
     void getTorrentPeersParsesI2pdScientificNotation();
+    void getTorrentTrackersRequestsOneTorrent();
+    void getTorrentsRequestsPercentDoneAndEta();
     void getTorrentsAcceptsJsonRpc2ResultObject();
     void addTorrentSendsBase64();
     void setFilePrioritySendsTorrentSet();
@@ -106,6 +108,8 @@ void RpcTests::getTorrentsOmitsPiecesInSimpleView()
     QVERIFY(!names.contains(QStringLiteral("pieces")));
     QVERIFY(names.contains(QStringLiteral("hashString")));
     QVERIFY(names.contains(QStringLiteral("peers")));
+    QVERIFY(names.contains(QStringLiteral("percentDone")));
+    QVERIFY(names.contains(QStringLiteral("eta")));
     QVERIFY(!names.contains(QStringLiteral("files")));
 }
 
@@ -244,6 +248,76 @@ void RpcTests::getTorrentPeersParsesI2pdScientificNotation()
     const QVector<i2p::Peer> peers = client.getTorrentPeers(5, &error);
     QVERIFY2(error.isEmpty(), qPrintable(error));
     QCOMPARE(peers.size(), 2);
+    QVERIFY(peers[0].progress.has_value());
+    QVERIFY(qAbs(*peers[0].progress - 0.5) < 1e-9);
+    QCOMPARE(peers[0].progressLabel(), QStringLiteral("50%"));
+}
+
+void RpcTests::getTorrentTrackersRequestsOneTorrent()
+{
+    QString capturedMethod;
+    int capturedId = 0;
+    QStringList capturedFields;
+    i2p::RpcClient client(
+        QStringLiteral("http://localhost:9191/mytorrents"),
+        [&](const QString &, const QByteArray &body, QString *) {
+            const QJsonObject payload = QJsonDocument::fromJson(body).object();
+            const QJsonObject arguments = payload.value(QStringLiteral("arguments")).toObject();
+            capturedMethod = payload.value(QStringLiteral("method")).toString();
+            capturedId = arguments.value(QStringLiteral("ids")).toArray().first().toInt();
+            for (const QJsonValue &field : arguments.value(QStringLiteral("fields")).toArray()) {
+                capturedFields << field.toString();
+            }
+            return QJsonDocument(QJsonObject{
+                                      {QStringLiteral("result"), QStringLiteral("success")},
+                                      {QStringLiteral("arguments"),
+                                       QJsonObject{{QStringLiteral("torrents"),
+                                                    QJsonArray{QJsonObject{
+                                                        {QStringLiteral("id"), 3},
+                                                        {QStringLiteral("trackers"),
+                                                         QJsonArray{QJsonObject{
+                                                             {QStringLiteral("id"), QStringLiteral("0")},
+                                                             {QStringLiteral("announce"),
+                                                              QStringLiteral("http://tracker2.postman.i2p/announce.php")},
+                                                             {QStringLiteral("tier"), 0},
+                                                         }}},
+                                                    }}}}}})
+                .toJson();
+        });
+    QString error;
+    const QVector<i2p::Tracker> trackers = client.getTorrentTrackers(3, &error);
+    QCOMPARE(capturedMethod, QStringLiteral("torrent-get"));
+    QCOMPARE(capturedId, 3);
+    QVERIFY(capturedFields.contains(QStringLiteral("trackers")));
+    QCOMPARE(trackers.size(), 1);
+    QCOMPARE(trackers[0].announce, QStringLiteral("http://tracker2.postman.i2p/announce.php"));
+}
+
+void RpcTests::getTorrentsRequestsPercentDoneAndEta()
+{
+    i2p::RpcClient client(
+        QStringLiteral("http://localhost:9191/mytorrents"),
+        [](const QString &, const QByteArray &, QString *) {
+            return QJsonDocument(QJsonObject{
+                                      {QStringLiteral("result"), QStringLiteral("success")},
+                                      {QStringLiteral("arguments"),
+                                       QJsonObject{{QStringLiteral("torrents"),
+                                                    QJsonArray{QJsonObject{
+                                                        {QStringLiteral("id"), 8},
+                                                        {QStringLiteral("name"), QStringLiteral("EtaTorrent")},
+                                                        {QStringLiteral("status"), 4},
+                                                        {QStringLiteral("totalSize"), 1000},
+                                                        {QStringLiteral("leftUntilDone"), 900},
+                                                        {QStringLiteral("percentDone"), 0.33},
+                                                        {QStringLiteral("eta"), 120},
+                                                    }}}}}})
+                .toJson();
+        });
+    QString error;
+    const QVector<i2p::Torrent> torrents = client.getTorrents(true, &error);
+    QCOMPARE(torrents.size(), 1);
+    QVERIFY(qAbs(torrents[0].progress() - 0.33) < 1e-9);
+    QCOMPARE(torrents[0].eta, qint64(120));
 }
 
 void RpcTests::getTorrentsAcceptsJsonRpc2ResultObject()

@@ -49,6 +49,9 @@ QFrame#SpinRow QSpinBox, QFrame#PathRow QLineEdit {
     background: transparent; border: none; padding: 0px 12px; min-height: 0px;
     selection-background-color: #0a84ff; selection-color: #ffffff;
 }
+QFrame#PathRow QLineEdit#ReadOnlyPath {
+    color: #a1a1a6;
+}
 QFrame#SpinRow QSpinBox:focus, QFrame#PathRow QLineEdit:focus { border: none; }
 QWidget#SpinStepColumn {
     background: transparent; border: none;
@@ -104,23 +107,23 @@ QScrollBar::handle:vertical {
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
 QCheckBox { spacing: 8px; }
-QWidget#FilesTablePane, QWidget#PeersTablePane {
+QWidget#FilesTablePane, QWidget#PeersTablePane, QWidget#TrackersTablePane {
     background: #1c1c1e; border: none; border-radius: 12px;
 }
 QWidget#FilesTableOverlay { background: transparent; border: none; }
-QTableWidget#FilesTable, QTableWidget#PeersTable {
+QTableWidget#FilesTable, QTableWidget#PeersTable, QTableWidget#TrackersTable {
     background: #2c2c2e; border: none; border-radius: 12px;
     gridline-color: transparent; outline: 0;
     alternate-background-color: #3d3d40;
 }
-QTableWidget#FilesTable::viewport, QTableWidget#PeersTable::viewport {
+QTableWidget#FilesTable::viewport, QTableWidget#PeersTable::viewport, QTableWidget#TrackersTable::viewport {
     background: transparent; border: none;
     border-bottom-left-radius: 12px; border-bottom-right-radius: 12px;
 }
 QTableWidget#FilesTable::item {
     padding: 0px; border: none; color: #f5f5f7; background: transparent;
 }
-QTableWidget#PeersTable::item {
+QTableWidget#PeersTable::item, QTableWidget#TrackersTable::item {
     padding: 6px 8px; border: none; color: #f5f5f7; background: transparent;
 }
 QTableWidget#FilesTable QLabel#FilesName {
@@ -155,10 +158,10 @@ QTableWidget#FilesTable QHeaderView::section:first {
 QTableWidget#FilesTable QHeaderView::section:last {
     border-top-right-radius: 12px;
 }
-QTableWidget#PeersTable QHeaderView {
+QTableWidget#PeersTable QHeaderView, QTableWidget#TrackersTable QHeaderView {
     background: transparent; border: none;
 }
-QTableWidget#PeersTable QHeaderView::section {
+QTableWidget#PeersTable QHeaderView, QTableWidget#TrackersTable QHeaderView::section {
     background: #252527;
     color: #c7c7cc;
     border: none;
@@ -166,10 +169,10 @@ QTableWidget#PeersTable QHeaderView::section {
     padding: 8px 8px;
     font-weight: 600; font-size: 12px;
 }
-QTableWidget#PeersTable QHeaderView::section:first {
+QTableWidget#PeersTable QHeaderView, QTableWidget#TrackersTable QHeaderView::section:first {
     border-top-left-radius: 12px;
 }
-QTableWidget#PeersTable QHeaderView::section:last {
+QTableWidget#PeersTable QHeaderView, QTableWidget#TrackersTable QHeaderView::section:last {
     border-top-right-radius: 12px;
 }
 

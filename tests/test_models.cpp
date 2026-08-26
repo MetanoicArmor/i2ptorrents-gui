@@ -17,6 +17,10 @@ private slots:
     void decodePieceBitfieldMsbFirst();
     void finishedTorrentWithoutBitfieldIsComplete();
     void progressIsClamped();
+    void percentDonePreferredOverLeftTotal();
+    void parsesEtaAndTrackers();
+    void peerProgressLabel();
+    void formatEtaHumanReadable();
     void humanReadableUnits();
 };
 
@@ -181,6 +185,70 @@ void ModelsTests::progressIsClamped()
     const std::optional<i2p::Torrent> torrent = i2p::torrentFromRpc(obj);
     QVERIFY(torrent.has_value());
     QCOMPARE(torrent->progress(), 0.0);
+}
+
+void ModelsTests::percentDonePreferredOverLeftTotal()
+{
+    const QJsonObject obj{
+        {QStringLiteral("id"), 1},
+        {QStringLiteral("totalSize"), 100},
+        {QStringLiteral("leftUntilDone"), 90},
+        {QStringLiteral("percentDone"), 0.42},
+    };
+    const std::optional<i2p::Torrent> torrent = i2p::torrentFromRpc(obj);
+    QVERIFY(torrent.has_value());
+    QVERIFY(qAbs(torrent->progress() - 0.42) < 1e-9);
+}
+
+void ModelsTests::parsesEtaAndTrackers()
+{
+    const QJsonObject obj{
+        {QStringLiteral("id"), 9},
+        {QStringLiteral("eta"), 3720},
+        {QStringLiteral("trackers"),
+         QJsonArray{
+             QJsonObject{{QStringLiteral("id"), QStringLiteral("0")},
+                         {QStringLiteral("announce"), QStringLiteral("http://tracker2.postman.i2p/announce.php")},
+                         {QStringLiteral("tier"), 0}},
+             QJsonObject{{QStringLiteral("id"), QStringLiteral("1")},
+                         {QStringLiteral("announce"), QStringLiteral("http://tracker.i2p/a")},
+                         {QStringLiteral("tier"), 1}},
+         }},
+    };
+    const std::optional<i2p::Torrent> torrent = i2p::torrentFromRpc(obj);
+    QVERIFY(torrent.has_value());
+    QCOMPARE(torrent->eta, qint64(3720));
+    QCOMPARE(torrent->trackers.size(), 2);
+    QCOMPARE(torrent->trackers[0].announce, QStringLiteral("http://tracker2.postman.i2p/announce.php"));
+    QCOMPARE(torrent->trackers[1].tier, 1);
+
+    const QVector<i2p::Tracker> only =
+        i2p::parseTorrentTrackers(QJsonObject{{QStringLiteral("trackers"), obj.value(QStringLiteral("trackers"))}});
+    QCOMPARE(only.size(), 2);
+}
+
+void ModelsTests::peerProgressLabel()
+{
+    const QJsonObject obj{
+        {QStringLiteral("peers"),
+         QJsonArray{QJsonObject{{QStringLiteral("address"), QStringLiteral("abcd")},
+                                {QStringLiteral("progress"), 0.5}}}},
+    };
+    const QVector<i2p::Peer> peers = i2p::parseTorrentPeers(obj);
+    QCOMPARE(peers.size(), 1);
+    QVERIFY(peers[0].progress.has_value());
+    QVERIFY(qAbs(*peers[0].progress - 0.5) < 1e-9);
+    QCOMPARE(peers[0].progressLabel(), QStringLiteral("50%"));
+}
+
+void ModelsTests::formatEtaHumanReadable()
+{
+    i2p::setLanguage(QStringLiteral("en"));
+    QCOMPARE(i2p::formatEta(-2), QString());
+    QCOMPARE(i2p::formatEta(45), QStringLiteral("45s"));
+    QCOMPARE(i2p::formatEta(125), QStringLiteral("2m"));
+    QCOMPARE(i2p::formatEta(3600), QStringLiteral("1h"));
+    QCOMPARE(i2p::formatEta(3720), QStringLiteral("1h 2m"));
 }
 
 void ModelsTests::humanReadableUnits()

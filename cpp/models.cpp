@@ -75,6 +75,24 @@ QString jsonString(const QJsonValue &value)
     return value.toVariant().toString();
 }
 
+std::optional<double> jsonDouble(const QJsonValue &value)
+{
+    if (value.isUndefined() || value.isNull()) {
+        return std::nullopt;
+    }
+    if (value.isDouble()) {
+        return value.toDouble();
+    }
+    if (value.isString()) {
+        bool ok = false;
+        const double parsed = value.toString().toDouble(&ok);
+        if (ok) {
+            return parsed;
+        }
+    }
+    return std::nullopt;
+}
+
 } // namespace
 
 TorrentStatus torrentStatusFromRpc(qint64 value)
@@ -163,6 +181,15 @@ QString Peer::ratesUpLabel() const
     return formatRate(rateToPeer);
 }
 
+QString Peer::progressLabel() const
+{
+    if (!progress.has_value()) {
+        return QStringLiteral("—");
+    }
+    const double percent = std::clamp(*progress * 100.0, 0.0, 100.0);
+    return QStringLiteral("%1%").arg(percent, 0, 'f', 0);
+}
+
 namespace {
 
 bool jsonBoolField(const QJsonObject &obj, std::initializer_list<const char *> keys)
@@ -194,6 +221,7 @@ std::optional<Peer> peerFromRpc(const QJsonValue &data)
     peer.isIncoming = jsonBoolField(obj, {"isIncoming", "is_incoming"});
     peer.isDownloadingFrom = jsonBoolField(obj, {"isDowloadingFrom", "isDownloadingFrom", "is_downloading_from"});
     peer.isUploadingTo = jsonBoolField(obj, {"isUploading_to", "isUploadingTo", "is_uploading_to"});
+    peer.progress = jsonDouble(valueOf(obj, "progress", "progress"));
     return peer;
 }
 
@@ -212,6 +240,30 @@ QVector<Peer> parseTorrentPeers(const QJsonObject &obj)
         }
     }
     return peers;
+}
+
+QVector<Tracker> parseTorrentTrackers(const QJsonObject &obj)
+{
+    const QJsonValue trackersValue = valueOf(obj, "trackers", "trackers");
+    if (!trackersValue.isArray()) {
+        return {};
+    }
+    QVector<Tracker> trackers;
+    for (const QJsonValue &item : trackersValue.toArray()) {
+        if (!item.isObject()) {
+            continue;
+        }
+        const QJsonObject trackerObj = item.toObject();
+        Tracker tracker;
+        tracker.id = jsonString(valueOf(trackerObj, "id", "id")).trimmed();
+        tracker.announce = jsonString(valueOf(trackerObj, "announce", "announce")).trimmed();
+        tracker.tier = static_cast<int>(jsonInt64(valueOf(trackerObj, "tier", "tier")).value_or(0));
+        if (tracker.announce.isEmpty() && tracker.id.isEmpty()) {
+            continue;
+        }
+        trackers.push_back(tracker);
+    }
+    return trackers;
 }
 
 void syncPeerCounts(Torrent &torrent, const QJsonObject &obj)
@@ -251,6 +303,9 @@ quint64 Torrent::completed() const
 
 double Torrent::progress() const
 {
+    if (percentDone.has_value()) {
+        return std::clamp(*percentDone, 0.0, 1.0);
+    }
     if (totalSize == 0) {
         return finished ? 1.0 : 0.0;
     }
@@ -390,6 +445,34 @@ QString formatRate(quint64 value)
     return formatBytes(value) + trKey(QStringLiteral("per_second"));
 }
 
+QString formatEta(qint64 seconds)
+{
+    if (seconds < 0) {
+        return {};
+    }
+    if (seconds < 60) {
+        QHash<QString, QString> args;
+        args.insert(QStringLiteral("n"), QString::number(seconds));
+        return trArgs(QStringLiteral("eta_seconds"), args);
+    }
+    if (seconds < 3600) {
+        QHash<QString, QString> args;
+        args.insert(QStringLiteral("n"), QString::number(seconds / 60));
+        return trArgs(QStringLiteral("eta_minutes"), args);
+    }
+    const qint64 hours = seconds / 3600;
+    const qint64 minutes = (seconds % 3600) / 60;
+    if (minutes == 0) {
+        QHash<QString, QString> args;
+        args.insert(QStringLiteral("n"), QString::number(hours));
+        return trArgs(QStringLiteral("eta_hours"), args);
+    }
+    QHash<QString, QString> args;
+    args.insert(QStringLiteral("h"), QString::number(hours));
+    args.insert(QStringLiteral("m"), QString::number(minutes));
+    return trArgs(QStringLiteral("eta_hours_minutes"), args);
+}
+
 QString progressText(const Torrent &torrent)
 {
     QHash<QString, QString> args;
@@ -431,6 +514,8 @@ std::optional<Torrent> torrentFromRpc(const QJsonValue &data)
     torrent.pieceSize = jsonUInt64(valueOf(obj, "pieceSize", "piece_size")).value_or(0);
     torrent.hashString = jsonString(valueOf(obj, "hashString", "hash_string")).trimmed();
     torrent.finished = jsonTruthy(valueOf(obj, "isFinished", "is_finished")).value_or(false);
+    torrent.percentDone = jsonDouble(valueOf(obj, "percentDone", "percent_done"));
+    torrent.eta = jsonInt64(valueOf(obj, "eta", "eta")).value_or(-1);
     const QString name = jsonString(obj.value(QStringLiteral("name")));
     torrent.name = name.isEmpty() ? trKey(QStringLiteral("untitled")) : name;
     torrent.pieces = decodePieceBitfield(
@@ -438,6 +523,7 @@ std::optional<Torrent> torrentFromRpc(const QJsonValue &data)
         torrent.pieceCount,
         torrent.finished);
     torrent.files = parseTorrentFiles(obj);
+    torrent.trackers = parseTorrentTrackers(obj);
     syncPeerCounts(torrent, obj);
     return torrent;
 }

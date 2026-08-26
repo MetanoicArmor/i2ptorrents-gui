@@ -204,7 +204,7 @@ C++17, Qt 6, and CMake are required. The release version comes from the `VERSION
 
 ### i2pd RPC limits
 
-Current i2pd exposes `torrent-add`, `torrent-get`, and `torrent-remove`. `torrent-get` can return `files`, `wanted`, and `priorities` (openssl branch, 20 Aug 2026). `wanted`/`priorities` are still stubs, and `torrent-set` is not implemented yet, so skip/priority in the GUI will show a notice until the daemon accepts it. Pause, resume, tracker edits, speed limits, and magnet links are not available. Add a ready `.torrent` file.
+Current i2pd exposes `torrent-add`, `torrent-get`, and `torrent-remove`. On the openssl branch, `torrent-get` returns `files`, `wanted`, `priorities`, `percentDone`, `eta`, `trackers`, and peer `clientName`/`progress` (BEP10). The GUI uses those fields for card progress/ETA, the Trackers dialog (announce list from the torrents tunnel), and peer client/progress columns. `wanted`/`priorities` are still stubs, and `torrent-set` is not implemented yet, so skip/priority in the GUI will show a notice until the daemon accepts it. Pause, resume, tracker edits, speed limits, and magnet links are not available. Add a ready `.torrent` file.
 
 ### License
 
@@ -390,7 +390,7 @@ cmake --build build --config Release
 
 ### Ограничения i2pd RPC
 
-Текущая реализация i2pd предоставляет `torrent-add`, `torrent-get` и `torrent-remove`. В `torrent-get` уже есть поля `files`, `wanted` и `priorities` (ветка openssl, 20 августа 2026). `wanted`/`priorities` пока заглушки, а `torrent-set` ещё нет — пропуск и приоритет в GUI покажут предупреждение, пока демон их не примет. Пауза, возобновление, изменение трекеров, лимитов скорости и magnet-ссылки пока не поддерживаются. Добавляйте готовый `.torrent`-файл.
+Текущая реализация i2pd предоставляет `torrent-add`, `torrent-get` и `torrent-remove`. В ветке openssl `torrent-get` отдаёт `files`, `wanted`, `priorities`, `percentDone`, `eta`, `trackers` и у пиров `clientName`/`progress` (BEP10). GUI использует их для прогресса/ETA на карточке, диалога трекеров (announce из torrents-туннеля) и колонок клиента/прогресса пиров. `wanted`/`priorities` пока заглушки, а `torrent-set` ещё нет — пропуск и приоритет в GUI покажут предупреждение, пока демон их не примет. Пауза, возобновление, изменение трекеров, лимитов скорости и magnet-ссылки пока не поддерживаются. Добавляйте готовый `.torrent`-файл.
 
 ### Лицензия
 

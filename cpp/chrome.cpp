@@ -2,6 +2,7 @@
 
 #include "app_constants.hpp"
 #include "i18n.hpp"
+#include "i2pd_tunnels.hpp"
 #include "resources.hpp"
 #include "theme.hpp"
 
@@ -308,32 +309,53 @@ std::optional<SettingsResult> settingsExec(QWidget *parent,
                                            const QString &stylesheet,
                                            const AppSettings &settings)
 {
+    AppSettings display = settings;
+    QString rpcTip = trKey(QStringLiteral("settings_rpc_tip"));
+    QString dirTip = trKey(QStringLiteral("settings_dir_tip"));
+    if (const auto tunnel = detectTorrentsTunnel()) {
+        if (!tunnel->torrentsDir.isEmpty()) {
+            display.torrentsDir = tunnel->torrentsDir;
+        }
+        const QString defaultRpc = QStringLiteral("http://127.0.0.1:9191/mytorrents");
+        if (display.rpcUrl.trimmed().isEmpty() || display.rpcUrl.trimmed() == defaultRpc) {
+            display.rpcUrl = tunnel->rpcUrl();
+        }
+        if (!tunnel->confPath.isEmpty()) {
+            rpcTip = trKey(QStringLiteral("settings_rpc_tip_with_path"))
+                         .replace(QStringLiteral("{path}"), tunnel->confPath);
+            dirTip = trKey(QStringLiteral("settings_dir_tip_with_path"))
+                         .replace(QStringLiteral("{path}"), tunnel->confPath);
+        }
+    }
+
     Utf8Holder utf8;
     i2p_settings_in input{
         utf8.add(stylesheet),
         utf8.add(trKey(QStringLiteral("settings_title"))),
         utf8.add(trKey(QStringLiteral("rpc_address"))),
-        utf8.add(settings.rpcUrl),
+        utf8.add(display.rpcUrl),
         utf8.addLiteral("http://127.0.0.1:9191/mytorrents"),
-        utf8.add(trKey(QStringLiteral("rpc_setup_tip"))),
+        utf8.add(rpcTip),
         utf8.add(trKey(QStringLiteral("torrents_directory"))),
-        utf8.add(settings.torrentsDir),
+        utf8.add(display.torrentsDir),
+        utf8.add(dirTip),
         utf8.add(trKey(QStringLiteral("browse"))),
+        utf8.add(trKey(QStringLiteral("settings_open_dir_missing"))),
         utf8.add(trKey(QStringLiteral("refresh_interval"))),
         utf8.add(trKey(QStringLiteral("seconds_suffix"))),
-        static_cast<int>(std::clamp(settings.refreshSeconds, quint32(2), quint32(60))),
+        static_cast<int>(std::clamp(display.refreshSeconds, quint32(2), quint32(60))),
         utf8.add(trKey(QStringLiteral("language"))),
         utf8.add(trKey(QStringLiteral("language_name_en"))),
         utf8.add(trKey(QStringLiteral("language_name_ru"))),
-        utf8.add(settings.language),
+        utf8.add(display.language),
         utf8.add(trKey(QStringLiteral("theme"))),
         utf8.add(trKey(QStringLiteral("theme_light"))),
         utf8.add(trKey(QStringLiteral("theme_night"))),
-        utf8.add(settings.theme),
+        utf8.add(display.theme),
         utf8.add(trKey(QStringLiteral("torrent_view"))),
         utf8.add(trKey(QStringLiteral("view_simple"))),
         utf8.add(trKey(QStringLiteral("view_detailed"))),
-        utf8.add(settings.torrentView),
+        utf8.add(display.torrentView),
         utf8.add(trKey(QStringLiteral("settings_note"))),
         utf8.add(trKey(QStringLiteral("save"))),
         utf8.add(trKey(QStringLiteral("cancel"))),
@@ -416,6 +438,7 @@ void peersExec(QWidget *parent,
     std::vector<QByteArray> downs;
     std::vector<QByteArray> ups;
     std::vector<QByteArray> flags;
+    std::vector<QByteArray> progresses;
     std::vector<i2p_peer_row> rows;
     addresses.reserve(peers.size());
     tips.reserve(peers.size());
@@ -423,6 +446,7 @@ void peersExec(QWidget *parent,
     downs.reserve(peers.size());
     ups.reserve(peers.size());
     flags.reserve(peers.size());
+    progresses.reserve(peers.size());
     rows.reserve(peers.size());
     for (const Peer &peer : peers) {
         addresses.push_back(toUtf8(peer.displayAddress()));
@@ -431,6 +455,7 @@ void peersExec(QWidget *parent,
         downs.push_back(toUtf8(peer.ratesDownLabel()));
         ups.push_back(toUtf8(peer.ratesUpLabel()));
         flags.push_back(toUtf8(peer.flagStr));
+        progresses.push_back(toUtf8(peer.progressLabel()));
         rows.push_back(i2p_peer_row{
             addresses.back().constData(),
             tips.back().constData(),
@@ -438,6 +463,7 @@ void peersExec(QWidget *parent,
             downs.back().constData(),
             ups.back().constData(),
             flags.back().constData(),
+            progresses.back().constData(),
         });
     }
     Utf8Holder utf8;
@@ -452,10 +478,45 @@ void peersExec(QWidget *parent,
         utf8.add(trKey(QStringLiteral("peers_down"))),
         utf8.add(trKey(QStringLiteral("peers_up"))),
         utf8.add(trKey(QStringLiteral("peers_flags"))),
+        utf8.add(trKey(QStringLiteral("peers_progress"))),
         rows.data(),
         static_cast<int>(rows.size()),
     };
     i2p_peers_exec(parent, &input);
+}
+
+void trackersExec(QWidget *parent,
+                  const QString &stylesheet,
+                  const QString &title,
+                  const QVector<Tracker> &trackers)
+{
+    std::vector<QByteArray> announces;
+    std::vector<QByteArray> tiers;
+    std::vector<i2p_tracker_row> rows;
+    announces.reserve(trackers.size());
+    tiers.reserve(trackers.size());
+    rows.reserve(trackers.size());
+    for (const Tracker &tracker : trackers) {
+        announces.push_back(toUtf8(tracker.announce.isEmpty() ? QStringLiteral("—") : tracker.announce));
+        tiers.push_back(toUtf8(QString::number(tracker.tier)));
+        rows.push_back(i2p_tracker_row{
+            announces.back().constData(),
+            tiers.back().constData(),
+        });
+    }
+    Utf8Holder utf8;
+    i2p_trackers_in input{
+        utf8.add(stylesheet),
+        utf8.add(title),
+        utf8.add(trKey(QStringLiteral("trackers_note"))),
+        utf8.add(trKey(QStringLiteral("trackers_empty"))),
+        utf8.add(trKey(QStringLiteral("close"))),
+        utf8.add(trKey(QStringLiteral("trackers_announce"))),
+        utf8.add(trKey(QStringLiteral("trackers_tier"))),
+        rows.data(),
+        static_cast<int>(rows.size()),
+    };
+    i2p_trackers_exec(parent, &input);
 }
 
 std::optional<bool> confirmRemove(QWidget *parent,

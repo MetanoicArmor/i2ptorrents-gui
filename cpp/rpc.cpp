@@ -295,6 +295,26 @@ QVector<Peer> RpcClient::getTorrentPeers(qint64 torrentId, QString *error)
     return parseTorrentPeers(rows.first().toObject());
 }
 
+QVector<Tracker> RpcClient::getTorrentTrackers(qint64 torrentId, QString *error)
+{
+    QJsonArray fields;
+    for (int index = 0; index < RPC_TRACKER_FIELD_COUNT; ++index) {
+        fields.append(QString::fromUtf8(RPC_TRACKER_FIELDS[index]));
+    }
+    QJsonObject arguments;
+    arguments.insert(QStringLiteral("ids"), QJsonArray{torrentId});
+    arguments.insert(QStringLiteral("fields"), fields);
+    const QJsonValue result = call(QStringLiteral("torrent-get"), arguments, error);
+    if (!result.isObject()) {
+        return {};
+    }
+    const QJsonArray rows = result.toObject().value(QStringLiteral("torrents")).toArray();
+    if (rows.isEmpty() || !rows.first().isObject()) {
+        return {};
+    }
+    return parseTorrentTrackers(rows.first().toObject());
+}
+
 QJsonObject RpcClient::addTorrentBytes(const QByteArray &content, QString *error)
 {
     if (content.isEmpty()) {

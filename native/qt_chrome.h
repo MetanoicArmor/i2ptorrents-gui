@@ -79,7 +79,9 @@ typedef struct i2p_settings_in {
     const char *rpc_tip;
     const char *dir_label;
     const char *dir_value;
+    const char *dir_tip;
     const char *browse;
+    const char *open_dir_missing;
     const char *refresh_label;
     const char *seconds_suffix;
     int refresh_value;
@@ -163,6 +165,7 @@ typedef struct i2p_peer_row {
     const char *rate_down;
     const char *rate_up;
     const char *flags;
+    const char *progress;
 } i2p_peer_row;
 
 typedef struct i2p_peers_in {
@@ -176,11 +179,31 @@ typedef struct i2p_peers_in {
     const char *col_down;
     const char *col_up;
     const char *col_flags;
+    const char *col_progress;
     const i2p_peer_row *peers;
     int peer_count;
 } i2p_peers_in;
 
 void i2p_peers_exec(void *parent, const i2p_peers_in *in);
+
+typedef struct i2p_tracker_row {
+    const char *announce;
+    const char *tier;
+} i2p_tracker_row;
+
+typedef struct i2p_trackers_in {
+    const char *stylesheet;
+    const char *title;
+    const char *note;
+    const char *empty;
+    const char *close;
+    const char *col_announce;
+    const char *col_tier;
+    const i2p_tracker_row *trackers;
+    int tracker_count;
+} i2p_trackers_in;
+
+void i2p_trackers_exec(void *parent, const i2p_trackers_in *in);
 
 int i2p_confirm_remove(void *parent, const char *title, const char *text,
                        const char *checkbox, const char *yes_label,

@@ -82,6 +82,10 @@ void peersExec(QWidget *parent,
                const QString &stylesheet,
                const QString &title,
                const QVector<Peer> &peers);
+void trackersExec(QWidget *parent,
+                  const QString &stylesheet,
+                  const QString &title,
+                  const QVector<Tracker> &trackers);
 std::optional<bool> confirmRemove(QWidget *parent,
                                   const QString &title,
                                   const QString &text,

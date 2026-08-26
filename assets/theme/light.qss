@@ -112,23 +112,23 @@ QScrollBar::handle:vertical {
 QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical { height: 0; }
 QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical { background: transparent; }
 QCheckBox { spacing: 8px; }
-QWidget#FilesTablePane, QWidget#PeersTablePane {
+QWidget#FilesTablePane, QWidget#PeersTablePane, QWidget#TrackersTablePane {
     background: #ffffff; border: none; border-radius: 12px;
 }
 QWidget#FilesTableOverlay { background: transparent; border: none; }
-QTableWidget#FilesTable, QTableWidget#PeersTable {
+QTableWidget#FilesTable, QTableWidget#PeersTable, QTableWidget#TrackersTable {
     background: #f2f2f7; border: none; border-radius: 12px;
     gridline-color: transparent; outline: 0;
     alternate-background-color: #e4e4e9;
 }
-QTableWidget#FilesTable::viewport, QTableWidget#PeersTable::viewport {
+QTableWidget#FilesTable::viewport, QTableWidget#PeersTable::viewport, QTableWidget#TrackersTable::viewport {
     background: transparent; border: none;
     border-bottom-left-radius: 12px; border-bottom-right-radius: 12px;
 }
 QTableWidget#FilesTable::item {
     padding: 0px; border: none; color: #1d1d1f; background: transparent;
 }
-QTableWidget#PeersTable::item {
+QTableWidget#PeersTable::item, QTableWidget#TrackersTable::item {
     padding: 6px 8px; border: none; color: #1d1d1f; background: transparent;
 }
 QTableWidget#FilesTable QLabel#FilesName {
@@ -163,10 +163,10 @@ QTableWidget#FilesTable QHeaderView::section:first {
 QTableWidget#FilesTable QHeaderView::section:last {
     border-top-right-radius: 12px;
 }
-QTableWidget#PeersTable QHeaderView {
+QTableWidget#PeersTable QHeaderView, QTableWidget#TrackersTable QHeaderView {
     background: transparent; border: none;
 }
-QTableWidget#PeersTable QHeaderView::section {
+QTableWidget#PeersTable QHeaderView, QTableWidget#TrackersTable QHeaderView::section {
     background: #ececf1;
     color: #6e6e73;
     border: none;
@@ -174,10 +174,10 @@ QTableWidget#PeersTable QHeaderView::section {
     padding: 8px 8px;
     font-weight: 600; font-size: 12px;
 }
-QTableWidget#PeersTable QHeaderView::section:first {
+QTableWidget#PeersTable QHeaderView, QTableWidget#TrackersTable QHeaderView::section:first {
     border-top-left-radius: 12px;
 }
-QTableWidget#PeersTable QHeaderView::section:last {
+QTableWidget#PeersTable QHeaderView, QTableWidget#TrackersTable QHeaderView::section:last {
     border-top-right-radius: 12px;
 }
 
