@@ -56,7 +56,7 @@
   "actions": "Действия",
   "torrent_start": "Старт",
   "torrent_stop": "Стоп",
-  "torrent_start_unsupported": "Эта сборка i2pd ещё не принимает torrent-start и torrent-stop. Обновите демон (ветка openssl, от 29 августа 2026).",
+  "torrent_start_unsupported": "Запущенный i2pd не принимает torrent-start и torrent-stop (RPC: Method not found). Соберите openssl от 29 августа 2026 или новее, перезапустите демон и проверьте curl перед Start/Stop в GUI.",
   "copy_hash": "Копировать info hash",
   "open_folder": "Открыть папку",
   "files_show": "Показать файлы",

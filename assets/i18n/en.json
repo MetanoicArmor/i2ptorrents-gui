@@ -56,7 +56,7 @@
   "actions": "Actions",
   "torrent_start": "Start",
   "torrent_stop": "Stop",
-  "torrent_start_unsupported": "This i2pd build does not accept torrent-start or torrent-stop yet. Update the daemon (openssl branch, 29 Aug 2026 or newer).",
+  "torrent_start_unsupported": "The running i2pd daemon does not accept torrent-start or torrent-stop (RPC: Method not found). Rebuild from the openssl branch (29 Aug 2026 or newer), restart i2pd, and verify with curl before using Start/Stop in the GUI.",
   "copy_hash": "Copy info hash",
   "open_folder": "Open folder",
   "files_show": "Show files",

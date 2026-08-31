@@ -18,6 +18,7 @@ private slots:
     void finishedTorrentWithoutBitfieldIsComplete();
     void progressIsClamped();
     void percentDonePreferredOverLeftTotal();
+    void percentDoneAcceptsPercentScale();
     void parsesEtaAndTrackers();
     void parsesTrackerStats();
     void peerProgressLabel();
@@ -199,6 +200,20 @@ void ModelsTests::percentDonePreferredOverLeftTotal()
     const std::optional<i2p::Torrent> torrent = i2p::torrentFromRpc(obj);
     QVERIFY(torrent.has_value());
     QVERIFY(qAbs(torrent->progress() - 0.42) < 1e-9);
+}
+
+void ModelsTests::percentDoneAcceptsPercentScale()
+{
+    const QJsonObject obj{
+        {QStringLiteral("id"), 6},
+        {QStringLiteral("totalSize"), 168099978},
+        {QStringLiteral("leftUntilDone"), 146079882},
+        {QStringLiteral("percentDone"), 13.099404450844128},
+    };
+    const std::optional<i2p::Torrent> torrent = i2p::torrentFromRpc(obj);
+    QVERIFY(torrent.has_value());
+    QVERIFY(torrent->progress() > 0.12);
+    QVERIFY(torrent->progress() < 0.14);
 }
 
 void ModelsTests::parsesEtaAndTrackers()

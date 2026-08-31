@@ -94,6 +94,14 @@ std::optional<double> jsonDouble(const QJsonValue &value)
     return std::nullopt;
 }
 
+double normalizePercentDone(double value)
+{
+    if (value > 1.0) {
+        return value / 100.0;
+    }
+    return value;
+}
+
 } // namespace
 
 TorrentStatus torrentStatusFromRpc(qint64 value)
@@ -344,13 +352,30 @@ quint64 Torrent::completed() const
 
 double Torrent::progress() const
 {
+    double fromBytes = 0.0;
+    if (totalSize > 0) {
+        fromBytes = std::clamp(static_cast<double>(completed()) / static_cast<double>(totalSize), 0.0, 1.0);
+    } else if (finished) {
+        fromBytes = 1.0;
+    }
+
     if (percentDone.has_value()) {
-        return std::clamp(*percentDone, 0.0, 1.0);
+        double ratio = std::clamp(normalizePercentDone(*percentDone), 0.0, 1.0);
+        if (totalSize == 0 && !finished && ratio >= 1.0) {
+            return fromBytes;
+        }
+        if (totalSize > 0 && leftUntilDone > 0 && ratio >= 0.999) {
+            return fromBytes;
+        }
+        if (totalSize > 0 && leftUntilDone == 0 && ratio < 0.999 && fromBytes >= 0.999) {
+            return fromBytes;
+        }
+        return ratio;
     }
     if (totalSize == 0) {
         return finished ? 1.0 : 0.0;
     }
-    return std::clamp(static_cast<double>(completed()) / static_cast<double>(totalSize), 0.0, 1.0);
+    return fromBytes;
 }
 
 QString Torrent::shortHash() const
