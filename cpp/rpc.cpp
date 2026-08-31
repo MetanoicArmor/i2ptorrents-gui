@@ -362,6 +362,22 @@ bool RpcClient::removeTorrent(qint64 torrentId, bool deleteData, QString *error)
     return error == nullptr || error->isEmpty();
 }
 
+bool RpcClient::startTorrent(qint64 torrentId, QString *error)
+{
+    QJsonObject arguments;
+    arguments.insert(QStringLiteral("ids"), QJsonArray{torrentId});
+    call(QStringLiteral("torrent-start"), arguments, error);
+    return error == nullptr || error->isEmpty();
+}
+
+bool RpcClient::stopTorrent(qint64 torrentId, QString *error)
+{
+    QJsonObject arguments;
+    arguments.insert(QStringLiteral("ids"), QJsonArray{torrentId});
+    call(QStringLiteral("torrent-stop"), arguments, error);
+    return error == nullptr || error->isEmpty();
+}
+
 bool RpcClient::setFilePriority(qint64 torrentId,
                                 qint64 index,
                                 bool wanted,

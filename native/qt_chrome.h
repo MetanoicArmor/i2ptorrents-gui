@@ -220,6 +220,9 @@ void i2p_peers_exec(void *parent, const i2p_peers_in *in);
 
 typedef struct i2p_tracker_row {
     const char *announce;
+    const char *seeds;
+    const char *leeches;
+    const char *last;
     const char *tier;
 } i2p_tracker_row;
 
@@ -230,6 +233,9 @@ typedef struct i2p_trackers_in {
     const char *empty;
     const char *close;
     const char *col_announce;
+    const char *col_seeds;
+    const char *col_leeches;
+    const char *col_last;
     const char *col_tier;
     const i2p_tracker_row *trackers;
     int tracker_count;

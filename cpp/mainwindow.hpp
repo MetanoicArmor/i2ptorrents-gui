@@ -38,6 +38,7 @@ private slots:
     void onTorrentsReady(QVector<Torrent> torrents, QString error);
     void onAddedReady(std::optional<QString> savedPath, QString error);
     void onRemovedReady(QString error);
+    void onStartStopReady(QString error, bool start);
 
 private:
     void applyChrome();
@@ -55,6 +56,7 @@ private:
     void showPeers(qint64 torrentId, const QString &name);
     void showTrackers(qint64 torrentId, const QString &name);
     void confirmRemoveTorrent(qint64 torrentId, const QString &name);
+    void startStopTorrent(qint64 torrentId, bool start);
     void openFolder(const QString &root, const QString &name);
     void openSettingsDialog();
     void openAboutDialog();

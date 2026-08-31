@@ -85,7 +85,7 @@ QComboBoxPrivateContainer {
 }
 QProgressBar { background: #3b3e48; border: none; border-radius: 3px; min-height: 7px; max-height: 7px; text-align: center; }
 QProgressBar::chunk { background: #0a84ff; border-radius: 3px; }
-QToolButton#MoreButton {
+QToolButton#MoreButton, QToolButton#StartStopButton {
     padding: 2px 8px; min-width: 24px; max-height: 22px; font-size: 11px; border-radius: 6px;
 }
 QMenu {

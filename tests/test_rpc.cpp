@@ -25,6 +25,7 @@ private slots:
     void getTorrentsAcceptsJsonRpc2ResultObject();
     void addTorrentSendsBase64();
     void setFilePrioritySendsTorrentSet();
+    void startStopTorrentSendsIds();
 };
 
 void RpcTests::normalizeRpcUrlCompletesPath()
@@ -289,6 +290,7 @@ void RpcTests::getTorrentTrackersRequestsOneTorrent()
     QCOMPARE(capturedMethod, QStringLiteral("torrent-get"));
     QCOMPARE(capturedId, 3);
     QVERIFY(capturedFields.contains(QStringLiteral("trackers")));
+    QVERIFY(capturedFields.contains(QStringLiteral("trackerStats")));
     QCOMPARE(trackers.size(), 1);
     QCOMPARE(trackers[0].announce, QStringLiteral("http://tracker2.postman.i2p/announce.php"));
 }
@@ -401,6 +403,30 @@ void RpcTests::setFilePrioritySendsTorrentSet()
     QVERIFY(client.setFilePriority(3, 2, false, 0, &error));
     QCOMPARE(method, QStringLiteral("torrent-set"));
     QCOMPARE(arguments.value(QStringLiteral("files-unwanted")).toArray().first().toInt(), 2);
+}
+
+void RpcTests::startStopTorrentSendsIds()
+{
+    QString method;
+    QJsonObject arguments;
+    i2p::RpcClient client(
+        QStringLiteral("http://localhost:9191"),
+        [&](const QString &, const QByteArray &body, QString *) {
+            const QJsonObject payload = QJsonDocument::fromJson(body).object();
+            method = payload.value(QStringLiteral("method")).toString();
+            arguments = payload.value(QStringLiteral("arguments")).toObject();
+            return QJsonDocument(QJsonObject{{QStringLiteral("result"), QStringLiteral("success")},
+                                               {QStringLiteral("arguments"), QJsonObject{}}})
+                .toJson();
+        });
+    QString error;
+    QVERIFY(client.startTorrent(4, &error));
+    QCOMPARE(method, QStringLiteral("torrent-start"));
+    QCOMPARE(arguments.value(QStringLiteral("ids")).toArray().first().toInt(), 4);
+
+    QVERIFY(client.stopTorrent(4, &error));
+    QCOMPARE(method, QStringLiteral("torrent-stop"));
+    QCOMPARE(arguments.value(QStringLiteral("ids")).toArray().first().toInt(), 4);
 }
 
 int runRpcTests(int argc, char *argv[])

@@ -10,21 +10,7 @@
 </p>
 
 <p align="center">
-  <img src="screenshots/screenshot-macos.png" alt="I2P Torrents on macOS" width="720" />
-  <br>
-  <em>macOS</em>
-</p>
-
-<p align="center">
-  <img src="screenshots/screenshot-windows.png" alt="I2P Torrents on Windows" width="720" />
-  <br>
-  <em>Windows</em>
-</p>
-
-<p align="center">
-  <img src="screenshots/screenshot-linux.png" alt="I2P Torrents on Linux" width="720" />
-  <br>
-  <em>Linux</em>
+  <img src="screenshots/screenshot.png" alt="I2P Torrents" width="720" />
 </p>
 
 ---
@@ -203,13 +189,13 @@ Push a version tag matching `VERSION`, or run **Actions → Release → Run work
 - file list on torrent click (available before the download finishes);
 - simple card view in settings;
 - copy info hash and open the download folder;
-- add `.torrent` files; **create** `.torrent` from a file or folder; remove with or without data;
+- add `.torrent` files; **create** `.torrent` from a file or folder; **start/stop** a torrent; remove with or without data;
 - search, filters, language (English / Русский), theme;
 - automatic refresh and connection diagnostics.
 
 ### i2pd RPC limits
 
-Current i2pd exposes `torrent-add`, `torrent-get`, and `torrent-remove`. On the openssl branch, `torrent-get` returns `files`, `wanted`, `priorities`, `percentDone`, `eta`, `trackers`, and peer `clientName`/`progress` (BEP10). `wanted`/`priorities` are still stubs, and `torrent-set` is not implemented yet. Pause, resume, tracker edits, speed limits, and magnet links are not available. Create torrent in the GUI, or add a ready `.torrent` file.
+Current i2pd exposes `torrent-add`, `torrent-get`, `torrent-remove`, `torrent-start`, and `torrent-stop`. On the openssl branch, `torrent-get` returns `files`, `wanted`, `priorities`, `percentDone`, `eta`, `trackers`, `trackerStats`, and peer `clientName`/`progress` (BEP10). `wanted`/`priorities` are still stubs, and `torrent-set` is not implemented yet. Tracker edits, speed limits, and magnet links are not available. Create torrent in the GUI, or add a ready `.torrent` file. Start/stop need i2pd openssl from 29 Aug 2026 or newer.
 
 ### License
 
@@ -382,13 +368,13 @@ ctest --test-dir build --output-on-failure
 - список файлов по клику на карточку;
 - упрощённый вид карточек в настройках;
 - копирование info hash и открытие папки загрузки;
-- добавление `.torrent`; **создание** `.torrent` из файла или папки; удаление с данными или без;
+- добавление `.torrent`; **создание** `.torrent` из файла или папки; **старт/стоп** торрента; удаление с данными или без;
 - поиск, фильтры, язык, тема;
 - автообновление и диагностика соединения.
 
 ### Ограничения i2pd RPC
 
-Доступны `torrent-add`, `torrent-get`, `torrent-remove`. В ветке openssl — `files`, `wanted`, `priorities`, `percentDone`, `eta`, `trackers`, у пиров `clientName`/`progress`. `torrent-set`, пауза, resume, правка трекеров, лимиты и magnet пока недоступны. Создавайте торрент в GUI или добавляйте готовый `.torrent`.
+Доступны `torrent-add`, `torrent-get`, `torrent-remove`, `torrent-start` и `torrent-stop`. В ветке openssl — `files`, `wanted`, `priorities`, `percentDone`, `eta`, `trackers`, `trackerStats`, у пиров `clientName`/`progress`. `torrent-set`, правка трекеров, лимиты и magnet пока недоступны. Создавайте торрент в GUI или добавляйте готовый `.torrent`. Старт/стоп требуют i2pd openssl от 29 августа 2026 или новее.
 
 ### Лицензия
 

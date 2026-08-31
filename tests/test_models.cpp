@@ -19,6 +19,7 @@ private slots:
     void progressIsClamped();
     void percentDonePreferredOverLeftTotal();
     void parsesEtaAndTrackers();
+    void parsesTrackerStats();
     void peerProgressLabel();
     void formatEtaHumanReadable();
     void humanReadableUnits();
@@ -225,6 +226,29 @@ void ModelsTests::parsesEtaAndTrackers()
     const QVector<i2p::Tracker> only =
         i2p::parseTorrentTrackers(QJsonObject{{QStringLiteral("trackers"), obj.value(QStringLiteral("trackers"))}});
     QCOMPARE(only.size(), 2);
+}
+
+void ModelsTests::parsesTrackerStats()
+{
+    const QJsonObject obj{
+        {QStringLiteral("trackerStats"),
+         QJsonArray{QJsonObject{{QStringLiteral("id"), 0},
+                                {QStringLiteral("announce"), QStringLiteral("http://tracker2.postman.i2p/announce.php")},
+                                {QStringLiteral("seederCount"), 12},
+                                {QStringLiteral("leecherCount"), 3},
+                                {QStringLiteral("lastAnnounceTime"), 1700000000}}}},
+        {QStringLiteral("trackers"),
+         QJsonArray{QJsonObject{{QStringLiteral("id"), QStringLiteral("0")},
+                                {QStringLiteral("announce"), QStringLiteral("http://ignored.i2p/a")},
+                                {QStringLiteral("tier"), 0}}}},
+    };
+    const QVector<i2p::Tracker> trackers = i2p::parseTorrentTrackers(obj);
+    QCOMPARE(trackers.size(), 1);
+    QCOMPARE(trackers[0].announce, QStringLiteral("http://tracker2.postman.i2p/announce.php"));
+    QCOMPARE(trackers[0].seederCount, qint64(12));
+    QCOMPARE(trackers[0].leecherCount, qint64(3));
+    QCOMPARE(trackers[0].lastAnnounceTime, qint64(1700000000));
+    QCOMPARE(trackers[0].seederLabel(), QStringLiteral("12"));
 }
 
 void ModelsTests::peerProgressLabel()

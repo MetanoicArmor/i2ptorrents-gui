@@ -56,6 +56,14 @@ struct Tracker {
     QString id;
     QString announce;
     int tier = 0;
+    qint64 seederCount = -1;
+    qint64 leecherCount = -1;
+    qint64 lastAnnouncePeerCount = -1;
+    qint64 lastAnnounceTime = 0;
+
+    QString seederLabel() const;
+    QString leecherLabel() const;
+    QString lastAnnounceLabel() const;
 };
 
 struct Torrent {

@@ -22,12 +22,12 @@ inline const char *RPC_FIELDS[] = {
 
 inline const char *RPC_FILE_FIELDS[] = {"id", "files", "wanted", "priorities"};
 inline const char *RPC_PEER_FIELDS[] = {"id", "peers"};
-inline const char *RPC_TRACKER_FIELDS[] = {"id", "trackers"};
+inline const char *RPC_TRACKER_FIELDS[] = {"id", "trackers", "trackerStats"};
 
 constexpr int RPC_FIELD_COUNT = 18;
 constexpr int RPC_FILE_FIELD_COUNT = 4;
 constexpr int RPC_PEER_FIELD_COUNT = 2;
-constexpr int RPC_TRACKER_FIELD_COUNT = 2;
+constexpr int RPC_TRACKER_FIELD_COUNT = 3;
 
 std::optional<QString> normalizeRpcUrl(const QString &value, QString *error = nullptr);
 bool rpcMethodUnsupported(const QString &message);
@@ -51,6 +51,8 @@ public:
     QJsonObject addTorrentBytes(const QByteArray &content, QString *error = nullptr);
     QJsonObject addTorrentPath(const QString &path, QString *error = nullptr);
     bool removeTorrent(qint64 torrentId, bool deleteData, QString *error = nullptr);
+    bool startTorrent(qint64 torrentId, QString *error = nullptr);
+    bool stopTorrent(qint64 torrentId, QString *error = nullptr);
     bool setFilePriority(qint64 torrentId,
                          qint64 index,
                          bool wanted,

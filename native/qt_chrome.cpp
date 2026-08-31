@@ -2907,7 +2907,8 @@ protected:
         for (QWidget *cur = widget->childAt(mouse->pos()); cur != nullptr && cur != widget;
              cur = cur->parentWidget()) {
             const QString name = cur->objectName();
-            if (name == QLatin1String("MoreButton") || name == QLatin1String("PeersLink")) {
+            if (name == QLatin1String("MoreButton") || name == QLatin1String("PeersLink") ||
+                name == QLatin1String("StartStopButton")) {
                 return false;
             }
         }
@@ -5147,21 +5148,30 @@ void i2p_trackers_exec(void *parent, const i2p_trackers_in *in) {
         pane_layout->setContentsMargins(0, 0, 0, 0);
         pane_layout->setSpacing(0);
 
-        auto *table = new QTableWidget(in->tracker_count, 2, pane);
+        auto *table = new QTableWidget(in->tracker_count, 5, pane);
         table->setObjectName(QStringLiteral("TrackersTable"));
         style_peers_table(table, &dialog);
-        table->setHorizontalHeaderLabels({qstr(in->col_announce), qstr(in->col_tier)});
+        table->setHorizontalHeaderLabels({qstr(in->col_announce),
+                                          qstr(in->col_seeds),
+                                          qstr(in->col_leeches),
+                                          qstr(in->col_last),
+                                          qstr(in->col_tier)});
         table->verticalHeader()->setVisible(false);
         table->setShowGrid(false);
         table->setSelectionMode(QAbstractItemView::NoSelection);
         table->setFocusPolicy(Qt::NoFocus);
         table->setEditTriggers(QAbstractItemView::NoEditTriggers);
         table->horizontalHeader()->setMinimumSectionSize(28);
-        table->horizontalHeader()->setStretchLastSection(true);
+        table->horizontalHeader()->setStretchLastSection(false);
         table->horizontalHeader()->setSectionResizeMode(0, QHeaderView::Stretch);
-        table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::Fixed);
-        if (QTableWidgetItem *tier_hdr = table->horizontalHeaderItem(1)) {
-            tier_hdr->setTextAlignment(Qt::AlignHCenter | Qt::AlignVCenter);
+        table->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+        table->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+        table->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
+        table->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
+        for (int col = 1; col <= 4; ++col) {
+            if (QTableWidgetItem *hdr = table->horizontalHeaderItem(col)) {
+                hdr->setTextAlignment(Qt::AlignHCenter | Qt::AlignVCenter);
+            }
         }
 
         for (int row = 0; row < in->tracker_count; ++row) {
@@ -5171,10 +5181,15 @@ void i2p_trackers_exec(void *parent, const i2p_trackers_in *in) {
             announce_item->setToolTip(announce);
             table->setItem(row, 0, announce_item);
 
-            const QString tier = qstr(tracker.tier);
-            auto *tier_item = new QTableWidgetItem(tier);
-            tier_item->setTextAlignment(Qt::AlignHCenter | Qt::AlignVCenter);
-            table->setItem(row, 1, tier_item);
+            const auto addCentered = [table, row](int column, const QString &text) {
+                auto *item = new QTableWidgetItem(text);
+                item->setTextAlignment(Qt::AlignHCenter | Qt::AlignVCenter);
+                table->setItem(row, column, item);
+            };
+            addCentered(1, qstr(tracker.seeds));
+            addCentered(2, qstr(tracker.leeches));
+            addCentered(3, qstr(tracker.last));
+            addCentered(4, qstr(tracker.tier));
         }
 
         new TableItemTooltipFilter(table);

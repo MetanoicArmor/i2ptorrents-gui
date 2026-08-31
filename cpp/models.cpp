@@ -3,6 +3,7 @@
 #include "i18n.hpp"
 
 #include <QByteArray>
+#include <QDateTime>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonValue>
@@ -242,28 +243,68 @@ QVector<Peer> parseTorrentPeers(const QJsonObject &obj)
     return peers;
 }
 
-QVector<Tracker> parseTorrentTrackers(const QJsonObject &obj)
+QString Tracker::seederLabel() const
 {
-    const QJsonValue trackersValue = valueOf(obj, "trackers", "trackers");
-    if (!trackersValue.isArray()) {
-        return {};
+    return seederCount < 0 ? QStringLiteral("—") : QString::number(seederCount);
+}
+
+QString Tracker::leecherLabel() const
+{
+    return leecherCount < 0 ? QStringLiteral("—") : QString::number(leecherCount);
+}
+
+QString Tracker::lastAnnounceLabel() const
+{
+    if (lastAnnounceTime <= 0) {
+        return QStringLiteral("—");
     }
+    return QDateTime::fromSecsSinceEpoch(lastAnnounceTime).toString(QStringLiteral("yyyy-MM-dd HH:mm"));
+}
+
+namespace {
+
+Tracker trackerFromRpc(const QJsonObject &trackerObj)
+{
+    Tracker tracker;
+    tracker.id = jsonString(valueOf(trackerObj, "id", "id")).trimmed();
+    tracker.announce = jsonString(valueOf(trackerObj, "announce", "announce")).trimmed();
+    tracker.tier = static_cast<int>(jsonInt64(valueOf(trackerObj, "tier", "tier")).value_or(0));
+    tracker.seederCount = jsonInt64(valueOf(trackerObj, "seederCount", "seeder_count")).value_or(-1);
+    tracker.leecherCount = jsonInt64(valueOf(trackerObj, "leecherCount", "leecher_count")).value_or(-1);
+    tracker.lastAnnouncePeerCount =
+        jsonInt64(valueOf(trackerObj, "lastAnnouncePeerCount", "last_announce_peer_count")).value_or(-1);
+    tracker.lastAnnounceTime = jsonInt64(valueOf(trackerObj, "lastAnnounceTime", "last_announce_time")).value_or(0);
+    return tracker;
+}
+
+QVector<Tracker> parseTrackerArray(const QJsonValue &value)
+{
     QVector<Tracker> trackers;
-    for (const QJsonValue &item : trackersValue.toArray()) {
+    if (!value.isArray()) {
+        return trackers;
+    }
+    for (const QJsonValue &item : value.toArray()) {
         if (!item.isObject()) {
             continue;
         }
-        const QJsonObject trackerObj = item.toObject();
-        Tracker tracker;
-        tracker.id = jsonString(valueOf(trackerObj, "id", "id")).trimmed();
-        tracker.announce = jsonString(valueOf(trackerObj, "announce", "announce")).trimmed();
-        tracker.tier = static_cast<int>(jsonInt64(valueOf(trackerObj, "tier", "tier")).value_or(0));
+        Tracker tracker = trackerFromRpc(item.toObject());
         if (tracker.announce.isEmpty() && tracker.id.isEmpty()) {
             continue;
         }
         trackers.push_back(tracker);
     }
     return trackers;
+}
+
+} // namespace
+
+QVector<Tracker> parseTorrentTrackers(const QJsonObject &obj)
+{
+    const QVector<Tracker> stats = parseTrackerArray(valueOf(obj, "trackerStats", "tracker_stats"));
+    if (!stats.isEmpty()) {
+        return stats;
+    }
+    return parseTrackerArray(valueOf(obj, "trackers", "trackers"));
 }
 
 void syncPeerCounts(Torrent &torrent, const QJsonObject &obj)

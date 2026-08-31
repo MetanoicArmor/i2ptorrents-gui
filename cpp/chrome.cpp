@@ -539,16 +539,28 @@ void trackersExec(QWidget *parent,
                   const QVector<Tracker> &trackers)
 {
     std::vector<QByteArray> announces;
+    std::vector<QByteArray> seeds;
+    std::vector<QByteArray> leeches;
+    std::vector<QByteArray> lasts;
     std::vector<QByteArray> tiers;
     std::vector<i2p_tracker_row> rows;
     announces.reserve(trackers.size());
+    seeds.reserve(trackers.size());
+    leeches.reserve(trackers.size());
+    lasts.reserve(trackers.size());
     tiers.reserve(trackers.size());
     rows.reserve(trackers.size());
     for (const Tracker &tracker : trackers) {
         announces.push_back(toUtf8(tracker.announce.isEmpty() ? QStringLiteral("—") : tracker.announce));
+        seeds.push_back(toUtf8(tracker.seederLabel()));
+        leeches.push_back(toUtf8(tracker.leecherLabel()));
+        lasts.push_back(toUtf8(tracker.lastAnnounceLabel()));
         tiers.push_back(toUtf8(QString::number(tracker.tier)));
         rows.push_back(i2p_tracker_row{
             announces.back().constData(),
+            seeds.back().constData(),
+            leeches.back().constData(),
+            lasts.back().constData(),
             tiers.back().constData(),
         });
     }
@@ -560,6 +572,9 @@ void trackersExec(QWidget *parent,
         utf8.add(trKey(QStringLiteral("trackers_empty"))),
         utf8.add(trKey(QStringLiteral("close"))),
         utf8.add(trKey(QStringLiteral("trackers_announce"))),
+        utf8.add(trKey(QStringLiteral("trackers_seeds"))),
+        utf8.add(trKey(QStringLiteral("trackers_leeches"))),
+        utf8.add(trKey(QStringLiteral("trackers_last"))),
         utf8.add(trKey(QStringLiteral("trackers_tier"))),
         rows.data(),
         static_cast<int>(rows.size()),

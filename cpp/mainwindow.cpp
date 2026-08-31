@@ -381,6 +381,19 @@ QWidget *MainWindow::makeCard(const Torrent &torrent)
     auto *status = new QLabel(torrent.statusLabel(), titleRow);
     status->setObjectName(QStringLiteral("StatusText"));
     titles->addWidget(status);
+    const bool stopped = torrent.status == TorrentStatus::Stopped;
+    auto *startBtn = new QToolButton(titleRow);
+    startBtn->setObjectName(QStringLiteral("StartStopButton"));
+    startBtn->setText(trKey(QStringLiteral("torrent_start")));
+    startBtn->setToolTip(trKey(QStringLiteral("torrent_start")));
+    startBtn->setEnabled(stopped);
+    titles->addWidget(startBtn);
+    auto *stopBtn = new QToolButton(titleRow);
+    stopBtn->setObjectName(QStringLiteral("StartStopButton"));
+    stopBtn->setText(trKey(QStringLiteral("torrent_stop")));
+    stopBtn->setToolTip(trKey(QStringLiteral("torrent_stop")));
+    stopBtn->setEnabled(!stopped);
+    titles->addWidget(stopBtn);
     auto *more = new QToolButton(titleRow);
     more->setObjectName(QStringLiteral("MoreButton"));
     more->setText(QStringLiteral("•••"));
@@ -475,6 +488,8 @@ QWidget *MainWindow::makeCard(const Torrent &torrent)
         }
     }
 
+    connect(startBtn, &QToolButton::clicked, this, [this, torrentId]() { startStopTorrent(torrentId, true); });
+    connect(stopBtn, &QToolButton::clicked, this, [this, torrentId]() { startStopTorrent(torrentId, false); });
     connect(more, &QToolButton::clicked, this, [this, torrent, more]() {
         showActions(torrent, reinterpret_cast<quintptr>(more));
     });
@@ -494,6 +509,13 @@ void MainWindow::showActions(const Torrent &torrent, quintptr morePtr)
         });
         popupAddAction(popup, trKey(QStringLiteral("trackers_show")), true, [this, torrent]() {
             defer([this, torrent]() { showTrackers(torrent.id, torrent.name); });
+        });
+        const bool stopped = torrent.status == TorrentStatus::Stopped;
+        popupAddAction(popup, trKey(QStringLiteral("torrent_start")), stopped, [this, torrent]() {
+            startStopTorrent(torrent.id, true);
+        });
+        popupAddAction(popup, trKey(QStringLiteral("torrent_stop")), !stopped, [this, torrent]() {
+            startStopTorrent(torrent.id, false);
         });
         popupAddAction(popup,
                          trKey(QStringLiteral("copy_hash")),
@@ -571,6 +593,30 @@ void MainWindow::showTrackers(qint64 torrentId, const QString &name)
         return;
     }
     trackersExec(this, stylesheet(settings_.theme), title, trackers);
+}
+
+void MainWindow::startStopTorrent(qint64 torrentId, bool start)
+{
+    const QString rpcUrl = settings_.rpcUrl;
+    QThread *thread = QThread::create([this, torrentId, rpcUrl, start]() {
+        QString error;
+        std::optional<QString> endpoint = normalizeRpcUrl(rpcUrl, &error);
+        if (!endpoint.has_value()) {
+            QMetaObject::invokeMethod(this, [this, error, start]() { onStartStopReady(error, start); },
+                                      Qt::QueuedConnection);
+            return;
+        }
+        RpcClient client(*endpoint);
+        const bool ok = start ? client.startTorrent(torrentId, &error) : client.stopTorrent(torrentId, &error);
+        if (!ok) {
+            QMetaObject::invokeMethod(this, [this, error, start]() { onStartStopReady(error, start); },
+                                      Qt::QueuedConnection);
+            return;
+        }
+        QMetaObject::invokeMethod(this, [this, start]() { onStartStopReady({}, start); }, Qt::QueuedConnection);
+    });
+    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+    thread->start();
 }
 
 void MainWindow::confirmRemoveTorrent(qint64 torrentId, const QString &name)
@@ -898,6 +944,18 @@ void MainWindow::onRemovedReady(QString error)
 {
     if (!error.isEmpty()) {
         QMessageBox::warning(this, trKey(QStringLiteral("remove_title")), error);
+        return;
+    }
+    spawnRefresh();
+}
+
+void MainWindow::onStartStopReady(QString error, bool start)
+{
+    if (!error.isEmpty()) {
+        const QString title = trKey(start ? QStringLiteral("torrent_start") : QStringLiteral("torrent_stop"));
+        const QString text =
+            rpcMethodUnsupported(error) ? trKey(QStringLiteral("torrent_start_unsupported")) : error;
+        QMessageBox::warning(this, title, text);
         return;
     }
     spawnRefresh();
