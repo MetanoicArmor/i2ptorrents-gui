@@ -88,6 +88,142 @@ bool rpcMethodUnsupported(const QString &message)
     return lower.contains(QStringLiteral("method not found")) || lower.contains(QStringLiteral("-32601"));
 }
 
+bool rpcMagnetUnsupported(const QString &message)
+{
+    const QString lower = message.toLower();
+    return rpcMethodUnsupported(message) || lower.contains(QStringLiteral("parse error")) ||
+           lower.contains(QStringLiteral("invalid or corrupt"));
+}
+
+namespace {
+
+bool isHexHash(const QString &value)
+{
+    if (value.size() != 40) {
+        return false;
+    }
+    for (const QChar ch : value) {
+        if (!ch.isDigit() && (ch.toLower() < QLatin1Char('a') || ch.toLower() > QLatin1Char('f'))) {
+            return false;
+        }
+    }
+    return true;
+}
+
+QByteArray decodeBase32Sha1(const QString &value)
+{
+    if (value.size() != 32) {
+        return {};
+    }
+    static const QString alphabet = QStringLiteral("ABCDEFGHIJKLMNOPQRSTUVWXYZ234567");
+    quint64 acc = 0;
+    int bits = 0;
+    QByteArray out;
+    out.reserve(20);
+    for (const QChar ch : value) {
+        const int index = alphabet.indexOf(ch.toUpper());
+        if (index < 0) {
+            return {};
+        }
+        acc = (acc << 5) | static_cast<quint64>(index);
+        bits += 5;
+        if (bits >= 8) {
+            bits -= 8;
+            out.append(static_cast<char>((acc >> bits) & 0xFFu));
+        }
+    }
+    return out.size() == 20 ? out : QByteArray{};
+}
+
+QString hexFromInfoHash(const QString &raw)
+{
+    const QString hash = raw.trimmed();
+    if (isHexHash(hash)) {
+        return hash.toLower();
+    }
+    const QByteArray bytes = decodeBase32Sha1(hash);
+    if (bytes.size() == 20) {
+        return QString::fromLatin1(bytes.toHex());
+    }
+    return {};
+}
+
+QJsonObject torrentAddResult(const QJsonValue &result)
+{
+    if (!result.isObject()) {
+        return {};
+    }
+    const QJsonObject obj = result.toObject();
+    if (obj.contains(QStringLiteral("torrent-added"))) {
+        return obj.value(QStringLiteral("torrent-added")).toObject();
+    }
+    if (obj.contains(QStringLiteral("torrent-duplicate"))) {
+        return obj.value(QStringLiteral("torrent-duplicate")).toObject();
+    }
+    return {};
+}
+
+} // namespace
+
+std::optional<QString> normalizeMagnetLink(const QString &value, QString *error)
+{
+    const QString trimmed = value.trimmed();
+    if (trimmed.isEmpty()) {
+        if (error) {
+            *error = trKey(QStringLiteral("add_magnet_invalid"));
+        }
+        return std::nullopt;
+    }
+
+    auto fail = [&]() -> std::optional<QString> {
+        if (error) {
+            *error = trKey(QStringLiteral("add_magnet_invalid"));
+        }
+        return std::nullopt;
+    };
+
+    QString query = trimmed;
+    if (query.startsWith(QLatin1String("magnet:"), Qt::CaseInsensitive)) {
+        query = query.mid(7);
+        if (query.startsWith(QLatin1Char('?'))) {
+            query.remove(0, 1);
+        }
+    } else if (query.contains(QLatin1Char(':'))) {
+        return fail();
+    }
+
+    query = QString::fromUtf8(QByteArray::fromPercentEncoding(query.toUtf8()));
+    const QStringList parts = query.split(QLatin1Char('&'), Qt::SkipEmptyParts);
+    if (parts.size() == 1 && !parts.first().contains(QLatin1Char('='))) {
+        const QString hex = hexFromInfoHash(parts.first());
+        if (hex.isEmpty()) {
+            return fail();
+        }
+        return QStringLiteral("magnet:?xt=urn:btih:") + hex;
+    }
+
+    for (const QString &part : parts) {
+        const int eq = part.indexOf(QLatin1Char('='));
+        if (eq <= 0) {
+            continue;
+        }
+        const QString key = part.left(eq).trimmed();
+        const QString value = part.mid(eq + 1).trimmed();
+        if (key.compare(QLatin1String("xt"), Qt::CaseInsensitive) != 0) {
+            continue;
+        }
+        if (!value.startsWith(QLatin1String("urn:btih:"), Qt::CaseInsensitive)) {
+            continue;
+        }
+        const QString hex = hexFromInfoHash(value.mid(9));
+        if (hex.isEmpty()) {
+            continue;
+        }
+        return QStringLiteral("magnet:?xt=urn:btih:") + hex;
+    }
+    return fail();
+}
+
 RpcClient::RpcClient(const QString &endpoint)
     : endpoint_(endpoint)
     , post_(defaultPost)
@@ -326,17 +462,18 @@ QJsonObject RpcClient::addTorrentBytes(const QByteArray &content, QString *error
     const QString metainfo = QString::fromLatin1(content.toBase64());
     const QJsonValue result =
         call(QStringLiteral("torrent-add"), {{QStringLiteral("metainfo"), metainfo}}, error);
-    if (!result.isObject()) {
+    return torrentAddResult(result);
+}
+
+QJsonObject RpcClient::addTorrentMagnet(const QString &magnet, QString *error)
+{
+    const std::optional<QString> normalized = normalizeMagnetLink(magnet, error);
+    if (!normalized.has_value()) {
         return {};
     }
-    const QJsonObject obj = result.toObject();
-    if (obj.contains(QStringLiteral("torrent-added"))) {
-        return obj.value(QStringLiteral("torrent-added")).toObject();
-    }
-    if (obj.contains(QStringLiteral("torrent-duplicate"))) {
-        return obj.value(QStringLiteral("torrent-duplicate")).toObject();
-    }
-    return {};
+    const QJsonValue result =
+        call(QStringLiteral("torrent-add"), {{QStringLiteral("filename"), *normalized}}, error);
+    return torrentAddResult(result);
 }
 
 QJsonObject RpcClient::addTorrentPath(const QString &path, QString *error)

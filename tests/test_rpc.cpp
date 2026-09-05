@@ -24,6 +24,8 @@ private slots:
     void getTorrentsRequestsPercentDoneAndEta();
     void getTorrentsAcceptsJsonRpc2ResultObject();
     void addTorrentSendsBase64();
+    void addTorrentMagnetSendsFilename();
+    void normalizeMagnetLinkAcceptsHexAndBase32();
     void setFilePrioritySendsTorrentSet();
     void startStopTorrentSendsIds();
 };
@@ -377,6 +379,72 @@ void RpcTests::addTorrentSendsBase64()
     QCOMPARE(capturedMethod, QStringLiteral("torrent-add"));
     QCOMPARE(QByteArray::fromBase64(capturedMetainfo.toUtf8()), QByteArray("d4:infode"));
     QCOMPARE(added.value(QStringLiteral("id")).toInt(), 1);
+}
+
+void RpcTests::addTorrentMagnetSendsFilename()
+{
+    QString method;
+    QJsonObject arguments;
+    i2p::RpcClient client(
+        QStringLiteral("http://localhost:9191"),
+        [&](const QString &, const QByteArray &body, QString *) {
+            const QJsonObject payload = QJsonDocument::fromJson(body).object();
+            method = payload.value(QStringLiteral("method")).toString();
+            arguments = payload.value(QStringLiteral("arguments")).toObject();
+            return QJsonDocument(QJsonObject{
+                                      {QStringLiteral("result"), QStringLiteral("success")},
+                                      {QStringLiteral("arguments"),
+                                       QJsonObject{{QStringLiteral("torrent-added"),
+                                                    QJsonObject{{QStringLiteral("id"), 7}}}}}})
+                .toJson();
+        });
+    QString error;
+    const QJsonObject added = client.addTorrentMagnet(
+        QStringLiteral("magnet:?xt=urn:btih:0123456789abcdef0123456789ABCDEF01234567"), &error);
+    QCOMPARE(method, QStringLiteral("torrent-add"));
+    QCOMPARE(arguments.value(QStringLiteral("filename")).toString(),
+             QStringLiteral("magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567"));
+    QVERIFY(!arguments.contains(QStringLiteral("metainfo")));
+    QCOMPARE(added.value(QStringLiteral("id")).toInt(), 7);
+}
+
+void RpcTests::normalizeMagnetLinkAcceptsHexAndBase32()
+{
+    QString error;
+    const std::optional<QString> fromHex = i2p::normalizeMagnetLink(
+        QStringLiteral("  MAGNET:?XT=urn:btih:0123456789ABCDEF0123456789abcdef01234567&dn=Demo  "),
+        &error);
+    QVERIFY(fromHex.has_value());
+    QCOMPARE(*fromHex, QStringLiteral("magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567"));
+
+    const std::optional<QString> fromRaw =
+        i2p::normalizeMagnetLink(QStringLiteral("0123456789ABCDEF0123456789abcdef01234567"), &error);
+    QVERIFY(fromRaw.has_value());
+    QCOMPARE(*fromRaw, QStringLiteral("magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567"));
+
+    const QByteArray bytes = QByteArray::fromHex("0123456789abcdef0123456789abcdef01234567");
+    QString base32;
+    static const char alphabet[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+    quint64 acc = 0;
+    int bits = 0;
+    for (unsigned char byte : bytes) {
+        acc = (acc << 8) | byte;
+        bits += 8;
+        while (bits >= 5) {
+            bits -= 5;
+            base32.append(QLatin1Char(alphabet[(acc >> bits) & 31]));
+        }
+    }
+    if (bits > 0) {
+        base32.append(QLatin1Char(alphabet[(acc << (5 - bits)) & 31]));
+    }
+    QCOMPARE(base32.size(), 32);
+    const std::optional<QString> fromBase32 = i2p::normalizeMagnetLink(base32, &error);
+    QVERIFY(fromBase32.has_value());
+    QCOMPARE(*fromBase32, QStringLiteral("magnet:?xt=urn:btih:0123456789abcdef0123456789abcdef01234567"));
+
+    QVERIFY(!i2p::normalizeMagnetLink(QStringLiteral("not-a-magnet"), &error).has_value());
+    QVERIFY(!error.isEmpty());
 }
 
 void RpcTests::setFilePrioritySendsTorrentSet()

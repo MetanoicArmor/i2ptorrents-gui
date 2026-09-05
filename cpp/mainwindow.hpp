@@ -36,7 +36,7 @@ private slots:
     void dispatchFilterSeeding();
     void pollWorker();
     void onTorrentsReady(QVector<Torrent> torrents, QString error);
-    void onAddedReady(std::optional<QString> savedPath, QString error);
+    void onAddedReady(std::optional<QString> savedPath, QString error, bool magnet = false);
     void onRemovedReady(QString error);
     void onStartStopReady(QString error, bool start);
 
@@ -48,8 +48,10 @@ private:
     QWidget *makeCard(const Torrent &torrent);
     void spawnRefresh();
     void openTorrentFile();
+    void openMagnetDialog();
     void openCreateTorrentDialog();
     void startAdd(const QString &source);
+    void startAddMagnet(const QString &magnet);
     void startAddMetainfo(const QByteArray &content, const QString &preferredName);
     void showActions(const Torrent &torrent, quintptr morePtr);
     void showFiles(qint64 torrentId, const QString &name);

@@ -98,6 +98,13 @@ typedef struct i2p_settings_in {
     const char *view_detailed;
     const char *view_current;
     const char *note;
+    const char *example_button;
+    const char *example_title;
+    const char *example_note;
+    const char *example_body;
+    const char *example_copy;
+    const char *example_copied;
+    const char *close;
     const char *save;
     const char *cancel;
 } i2p_settings_in;
@@ -246,6 +253,18 @@ void i2p_trackers_exec(void *parent, const i2p_trackers_in *in);
 int i2p_confirm_remove(void *parent, const char *title, const char *text,
                        const char *checkbox, const char *yes_label,
                        const char *cancel_label, int *delete_data);
+
+typedef struct i2p_magnet_in {
+    const char *stylesheet;
+    const char *title;
+    const char *note;
+    const char *placeholder;
+    const char *initial;
+    const char *ok;
+    const char *cancel;
+} i2p_magnet_in;
+
+const char *i2p_magnet_prompt(void *parent, const i2p_magnet_in *in);
 void i2p_set_named_text(void *parent, const char *name, const char *text);
 void i2p_set_dialog_title(void *parent, const char *title);
 void i2p_apply_app_font(int point_size, const char *fonts_dir, const char *language);

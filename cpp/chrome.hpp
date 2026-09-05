@@ -69,6 +69,9 @@ void defer(std::function<void()> callback);
 void addShortcut(QWidget *parent, const QString &key, std::function<void()> callback);
 
 std::optional<QString> openFile(QWidget *parent, const QString &title, const QString &filter);
+std::optional<QString> magnetPrompt(QWidget *parent,
+                                    const QString &stylesheet,
+                                    const QString &initial);
 struct CreateTorrentResult {
     QString torrentPath;
     bool addAfter = false;

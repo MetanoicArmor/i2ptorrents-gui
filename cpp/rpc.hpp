@@ -30,7 +30,9 @@ constexpr int RPC_PEER_FIELD_COUNT = 2;
 constexpr int RPC_TRACKER_FIELD_COUNT = 3;
 
 std::optional<QString> normalizeRpcUrl(const QString &value, QString *error = nullptr);
+std::optional<QString> normalizeMagnetLink(const QString &value, QString *error = nullptr);
 bool rpcMethodUnsupported(const QString &message);
+bool rpcMagnetUnsupported(const QString &message);
 
 class RpcClient {
 public:
@@ -50,6 +52,7 @@ public:
     QVector<Tracker> getTorrentTrackers(qint64 torrentId, QString *error = nullptr);
     QJsonObject addTorrentBytes(const QByteArray &content, QString *error = nullptr);
     QJsonObject addTorrentPath(const QString &path, QString *error = nullptr);
+    QJsonObject addTorrentMagnet(const QString &magnet, QString *error = nullptr);
     bool removeTorrent(qint64 torrentId, bool deleteData, QString *error = nullptr);
     bool startTorrent(qint64 torrentId, QString *error = nullptr);
     bool stopTorrent(qint64 torrentId, QString *error = nullptr);

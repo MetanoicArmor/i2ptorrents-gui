@@ -3542,6 +3542,7 @@ thread_local std::string g_settings_theme;
 thread_local std::string g_settings_view;
 thread_local int g_settings_refresh = 2;
 thread_local std::string g_open_file;
+thread_local std::string g_magnet_link;
 thread_local std::string g_create_torrent_path;
 thread_local int g_create_torrent_add_after = 0;
 
@@ -4162,6 +4163,58 @@ int i2p_settings_exec(void *parent, const i2p_settings_in *in) {
     note->setToolTip(qstr(in->rpc_tip));
     lock_wrapped_label(note, inner_w);
     layout->addWidget(note);
+
+    auto *example = new QPushButton(qstr(in->example_button), &dialog);
+    lock_dialog_control(example);
+    example->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+    QObject::connect(example, &QPushButton::clicked, &dialog, [&dialog, host, in] {
+        QDialog box(nullptr, hosted_dialog_flags());
+        prepare_hosted_dialog(&box);
+        box.setWindowTitle(qstr(in->example_title));
+        box.setFixedWidth(DialogMetrics::kSettingsW);
+        box.setStyleSheet(dialog.styleSheet());
+
+        const QMargins example_margins = DialogMetrics::dialog_margins(18, 18);
+        const int example_inner = DialogMetrics::inner_w(DialogMetrics::kSettingsW, example_margins);
+        auto *box_layout = new QVBoxLayout(&box);
+        box_layout->setContentsMargins(example_margins);
+        box_layout->setSpacing(10);
+
+        auto *hint = new QLabel(qstr(in->example_note), &box);
+        hint->setObjectName(QStringLiteral("Secondary"));
+        hint->setWordWrap(true);
+        lock_wrapped_label(hint, example_inner);
+        box_layout->addWidget(hint);
+
+        auto *text = new QTextEdit(&box);
+        text->setObjectName(QStringLiteral("CreateTrackers"));
+        text->setAcceptRichText(false);
+        text->setReadOnly(true);
+        text->setFrameShape(QFrame::NoFrame);
+        text->setPlainText(qstr(in->example_body));
+        text->setFixedHeight(148);
+        text->setTabChangesFocus(true);
+        box_layout->addWidget(text);
+
+        auto *close = new QPushButton(qstr(in->close), &box);
+        auto *copy = new QPushButton(qstr(in->example_copy), &box);
+        copy->setObjectName(QStringLiteral("Primary"));
+        copy->setDefault(true);
+        QObject::connect(close, &QPushButton::clicked, &box, &QDialog::accept);
+        QObject::connect(copy, &QPushButton::clicked, &box, [copy, text, in] {
+            if (QClipboard *clipboard = QApplication::clipboard()) {
+                clipboard->setText(text->toPlainText());
+            }
+            copy->setText(qstr(in->example_copied));
+        });
+        add_dialog_buttons(box_layout, {close, copy});
+
+        exec_app_modal_dialog(&box, host != nullptr ? host : &dialog, example_inner,
+                              QSize(DialogMetrics::kSettingsW, 0), [&] {
+                                  lock_wrapped_label(hint, example_inner);
+                              });
+    });
+    layout->addWidget(example, 0, Qt::AlignLeft);
     layout->addStretch(1);
 
     auto *cancel = new QPushButton(qstr(in->cancel), &dialog);
@@ -4178,6 +4231,7 @@ int i2p_settings_exec(void *parent, const i2p_settings_in *in) {
         dir_row->setMinimumWidth(inner_w);
         lock_dialog_control(path_row);
         lock_dialog_control(browse);
+        lock_dialog_control(example);
     });
     if (dialog.result() != QDialog::Accepted) {
         return 0;
@@ -5283,6 +5337,70 @@ int i2p_confirm_remove(void *parent, const char *title, const char *text, const 
         *delete_data = check->isChecked() ? 1 : 0;
     }
     return result == QMessageBox::Yes ? 1 : 0;
+}
+
+const char *i2p_magnet_prompt(void *parent, const i2p_magnet_in *in)
+{
+    g_magnet_link.clear();
+    if (in == nullptr) {
+        return nullptr;
+    }
+    QWidget *host = as_widget(parent);
+    QDialog dialog(nullptr, hosted_dialog_flags());
+    prepare_hosted_dialog(&dialog);
+    dialog.setWindowTitle(qstr(in->title));
+    dialog.setFixedWidth(DialogMetrics::kCreateW);
+    if (in->stylesheet && in->stylesheet[0] != '\0') {
+        dialog.setStyleSheet(qstr(in->stylesheet));
+    }
+
+    const QMargins margins = DialogMetrics::dialog_margins(18, 18);
+    const int inner_w = DialogMetrics::inner_w(DialogMetrics::kCreateW, margins);
+    auto *layout = new QVBoxLayout(&dialog);
+    layout->setContentsMargins(margins);
+    layout->setSpacing(10);
+
+    auto *note = new QLabel(qstr(in->note), &dialog);
+    note->setObjectName(QStringLiteral("Secondary"));
+    note->setWordWrap(true);
+    lock_wrapped_label(note, inner_w);
+    layout->addWidget(note);
+
+    auto *field_row = new QFrame(&dialog);
+    field_row->setObjectName(QStringLiteral("PathRow"));
+    lock_dialog_control(field_row);
+    field_row->setFixedHeight(DialogMetrics::kControlMinH);
+    auto *field_layout = new QHBoxLayout(field_row);
+    field_layout->setContentsMargins(0, 0, 0, 0);
+    auto *field = new QLineEdit(qstr(in->initial), field_row);
+    field->setFrame(false);
+    field->setTextMargins(4, 0, 4, 0);
+    field->setPlaceholderText(qstr(in->placeholder));
+    field_layout->addWidget(field, 1);
+    layout->addWidget(field_row);
+
+    auto *cancel = new QPushButton(qstr(in->cancel), &dialog);
+    auto *ok = new QPushButton(qstr(in->ok), &dialog);
+    ok->setObjectName(QStringLiteral("Primary"));
+    ok->setDefault(true);
+    QObject::connect(cancel, &QPushButton::clicked, &dialog, &QDialog::reject);
+    QObject::connect(ok, &QPushButton::clicked, &dialog, [&dialog, field] {
+        if (field->text().trimmed().isEmpty()) {
+            return;
+        }
+        dialog.accept();
+    });
+    add_dialog_buttons(layout, {cancel, ok});
+
+    exec_app_modal_dialog(&dialog, host, inner_w, QSize(DialogMetrics::kCreateW, 0), [&] {
+        lock_wrapped_label(note, inner_w);
+        lock_dialog_control(field_row);
+    });
+    if (dialog.result() != QDialog::Accepted) {
+        return nullptr;
+    }
+    g_magnet_link = field->text().trimmed().toStdString();
+    return g_magnet_link.empty() ? nullptr : g_magnet_link.c_str();
 }
 
 void i2p_set_named_text(void *parent, const char *name, const char *text) {

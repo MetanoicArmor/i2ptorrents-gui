@@ -523,6 +523,13 @@ void MainWindow::showActions(const Torrent &torrent, quintptr morePtr)
                          [hash = torrent.hashString]() {
                              QApplication::clipboard()->setText(hash.toLower());
                          });
+        popupAddAction(popup,
+                         trKey(QStringLiteral("copy_magnet")),
+                         !torrent.hashString.isEmpty(),
+                         [hash = torrent.hashString]() {
+                             QApplication::clipboard()->setText(QStringLiteral("magnet:?xt=urn:btih:") +
+                                                                hash.toLower());
+                         });
         popupAddAction(popup, trKey(QStringLiteral("open_folder")), true, [this, torrent]() {
             openFolder(settings_.torrentsDir, torrent.name);
         });
@@ -704,6 +711,32 @@ void MainWindow::openTorrentFile()
     startAdd(*path);
 }
 
+void MainWindow::openMagnetDialog()
+{
+    if (adding_) {
+        return;
+    }
+    if (statusMode_ != QStringLiteral("online")) {
+        QMessageBox::warning(this,
+                             trKey(QStringLiteral("add_magnet_title")),
+                             trKey(QStringLiteral("add_magnet_needs_rpc")));
+        return;
+    }
+    QString initial;
+    if (QClipboard *clipboard = QApplication::clipboard()) {
+        const QString text = clipboard->text().trimmed();
+        if (normalizeMagnetLink(text)) {
+            initial = text;
+        }
+    }
+    const std::optional<QString> magnet =
+        magnetPrompt(this, stylesheet(settings_.theme), initial);
+    if (!magnet.has_value()) {
+        return;
+    }
+    startAddMagnet(*magnet);
+}
+
 void MainWindow::openCreateTorrentDialog()
 {
     if (adding_) {
@@ -738,6 +771,40 @@ void MainWindow::startAdd(const QString &source)
     }
     const QByteArray content = file.readAll();
     startAddMetainfo(content, QFileInfo(trimmed).fileName());
+}
+
+void MainWindow::startAddMagnet(const QString &magnet)
+{
+    QString parseError;
+    const std::optional<QString> normalized = normalizeMagnetLink(magnet, &parseError);
+    if (!normalized.has_value()) {
+        QMessageBox::warning(this, trKey(QStringLiteral("add_magnet_title")), parseError);
+        return;
+    }
+    if (adding_) {
+        return;
+    }
+    adding_ = true;
+    statusMode_ = QStringLiteral("copying");
+    setStatus();
+
+    const QString rpcUrl = settings_.rpcUrl;
+    const QString payload = *normalized;
+    QThread *thread = QThread::create([this, rpcUrl, payload]() {
+        QString error;
+        std::optional<QString> endpoint = normalizeRpcUrl(rpcUrl, &error);
+        if (endpoint.has_value()) {
+            RpcClient client(*endpoint);
+            if (client.addTorrentMagnet(payload, &error).isEmpty() && !error.isEmpty()) {
+                // keep error
+            }
+        }
+        QMetaObject::invokeMethod(this,
+                                  [this, error]() { onAddedReady(std::nullopt, error, true); },
+                                  Qt::QueuedConnection);
+    });
+    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+    thread->start();
 }
 
 void MainWindow::startAddMetainfo(const QByteArray &content, const QString &preferredName)
@@ -860,7 +927,14 @@ void MainWindow::dispatchRefresh()
 
 void MainWindow::dispatchAdd()
 {
-    openTorrentFile();
+    showPopupBelow(this, reinterpret_cast<quintptr>(addButton_), settings_.theme, [this](void *popup) {
+        popupAddAction(popup, trKey(QStringLiteral("add_torrent_file")), true, [this]() {
+            defer([this]() { openTorrentFile(); });
+        });
+        popupAddAction(popup, trKey(QStringLiteral("add_magnet")), true, [this]() {
+            defer([this]() { openMagnetDialog(); });
+        });
+    });
 }
 
 void MainWindow::dispatchCreate()
@@ -923,7 +997,7 @@ void MainWindow::onTorrentsReady(QVector<Torrent> torrents, QString error)
     renderCards();
 }
 
-void MainWindow::onAddedReady(std::optional<QString> savedPath, QString error)
+void MainWindow::onAddedReady(std::optional<QString> savedPath, QString error, bool magnet)
 {
     adding_ = false;
     if (error.isEmpty()) {
@@ -936,7 +1010,9 @@ void MainWindow::onAddedReady(std::optional<QString> savedPath, QString error)
         spawnRefresh();
         return;
     }
-    QMessageBox::warning(this, trKey(QStringLiteral("add_failed")), error);
+    const QString text =
+        magnet && rpcMagnetUnsupported(error) ? trKey(QStringLiteral("add_magnet_unsupported")) : error;
+    QMessageBox::warning(this, trKey(QStringLiteral("add_failed")), text);
     spawnRefresh();
 }
 

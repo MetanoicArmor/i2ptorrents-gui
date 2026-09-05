@@ -282,6 +282,25 @@ std::optional<QString> openFile(QWidget *parent, const QString &title, const QSt
     return QString::fromUtf8(raw);
 }
 
+std::optional<QString> magnetPrompt(QWidget *parent, const QString &stylesheet, const QString &initial)
+{
+    Utf8Holder utf8;
+    i2p_magnet_in input{
+        utf8.add(stylesheet),
+        utf8.add(trKey(QStringLiteral("add_magnet_title"))),
+        utf8.add(trKey(QStringLiteral("add_magnet_note"))),
+        utf8.add(trKey(QStringLiteral("add_magnet_placeholder"))),
+        utf8.add(initial),
+        utf8.add(trKey(QStringLiteral("add_magnet"))),
+        utf8.add(trKey(QStringLiteral("cancel"))),
+    };
+    const char *raw = i2p_magnet_prompt(parent, &input);
+    if (raw == nullptr || raw[0] == '\0') {
+        return std::nullopt;
+    }
+    return QString::fromUtf8(raw);
+}
+
 std::optional<CreateTorrentResult> createTorrentExec(QWidget *parent,
                                                      const QString &stylesheet,
                                                      bool rpcOnline)
@@ -363,6 +382,7 @@ std::optional<SettingsResult> settingsExec(QWidget *parent,
     AppSettings display = settings;
     QString rpcTip = trKey(QStringLiteral("settings_rpc_tip"));
     QString dirTip = trKey(QStringLiteral("settings_dir_tip"));
+    QString exampleNote = trKey(QStringLiteral("settings_example_note"));
     if (const auto tunnel = detectTorrentsTunnel()) {
         display.rpcUrl = tunnel->rpcUrl();
         if (!tunnel->torrentsDir.isEmpty()) {
@@ -373,6 +393,8 @@ std::optional<SettingsResult> settingsExec(QWidget *parent,
                          .replace(QStringLiteral("{path}"), tunnel->confPath);
             dirTip = trKey(QStringLiteral("settings_dir_tip_with_path"))
                          .replace(QStringLiteral("{path}"), tunnel->confPath);
+            exampleNote = trKey(QStringLiteral("settings_example_note_with_path"))
+                              .replace(QStringLiteral("{path}"), tunnel->confPath);
         }
     }
 
@@ -405,6 +427,13 @@ std::optional<SettingsResult> settingsExec(QWidget *parent,
         utf8.add(trKey(QStringLiteral("view_detailed"))),
         utf8.add(display.torrentView),
         utf8.add(trKey(QStringLiteral("settings_note"))),
+        utf8.add(trKey(QStringLiteral("settings_example_config"))),
+        utf8.add(trKey(QStringLiteral("settings_example_title"))),
+        utf8.add(exampleNote),
+        utf8.add(trKey(QStringLiteral("settings_example_body"))),
+        utf8.add(trKey(QStringLiteral("settings_example_copy"))),
+        utf8.add(trKey(QStringLiteral("settings_example_copied"))),
+        utf8.add(trKey(QStringLiteral("close"))),
         utf8.add(trKey(QStringLiteral("save"))),
         utf8.add(trKey(QStringLiteral("cancel"))),
     };

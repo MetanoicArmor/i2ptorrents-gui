@@ -10,7 +10,21 @@
 </p>
 
 <p align="center">
-  <img src="screenshots/screenshot.png" alt="I2P Torrents" width="720" />
+  <img src="screenshots/screenshot1.png" alt="I2P Torrents — torrent list" width="720" />
+  <br>
+  <em>Torrent list</em>
+</p>
+
+<p align="center">
+  <img src="screenshots/screenshot2.png" alt="I2P Torrents — create torrent" width="720" />
+  <br>
+  <em>Create torrent</em>
+</p>
+
+<p align="center">
+  <img src="screenshots/screenshot3.png" alt="I2P Torrents — tunnels.conf example" width="720" />
+  <br>
+  <em>Settings · Example tunnels.conf</em>
 </p>
 
 ---
@@ -189,13 +203,13 @@ Push a version tag matching `VERSION`, or run **Actions → Release → Run work
 - file list on torrent click (available before the download finishes);
 - simple card view in settings;
 - copy info hash and open the download folder;
-- add `.torrent` files; **create** `.torrent` from a file or folder; **start/stop** a torrent; remove with or without data;
+- add `.torrent` files or **magnet** links; **create** `.torrent` from a file or folder; **start/stop** a torrent; remove with or without data;
 - search, filters, language (English / Русский), theme;
 - automatic refresh and connection diagnostics.
 
 ### i2pd RPC limits
 
-Current i2pd exposes `torrent-add`, `torrent-get`, `torrent-remove`, `torrent-start`, and `torrent-stop`. On the openssl branch, `torrent-get` returns `files`, `wanted`, `priorities`, `percentDone`, `eta`, `trackers`, `trackerStats`, and peer `clientName`/`progress` (BEP10). `wanted`/`priorities` are still stubs, and `torrent-set` is not implemented yet. Tracker edits, speed limits, and magnet links are not available. Create torrent in the GUI, or add a ready `.torrent` file. Start/stop need i2pd openssl from 29 Aug 2026 or newer.
+Current i2pd exposes `torrent-add`, `torrent-get`, `torrent-remove`, `torrent-start`, and `torrent-stop`. On the openssl branch, `torrent-add` accepts `metainfo` (`.torrent`) and `filename` (magnet `xt=urn:btih:` hex or Base32 hash). `torrent-get` returns `files`, `wanted`, `priorities`, `percentDone`, `eta`, `trackers`, `trackerStats`, and peer `clientName`/`progress` (BEP10). `wanted`/`priorities` are still stubs, and `torrent-set` is not implemented yet. Tracker edits and speed limits are not available. Magnets need i2pd openssl from 3 Sep 2026 or newer; start/stop need 29 Aug 2026 or newer.
 
 ### License
 
@@ -368,13 +382,13 @@ ctest --test-dir build --output-on-failure
 - список файлов по клику на карточку;
 - упрощённый вид карточек в настройках;
 - копирование info hash и открытие папки загрузки;
-- добавление `.torrent`; **создание** `.torrent` из файла или папки; **старт/стоп** торрента; удаление с данными или без;
+- добавление `.torrent` или **магнит-ссылки**; **создание** `.torrent` из файла или папки; **старт/стоп** торрента; удаление с данными или без;
 - поиск, фильтры, язык, тема;
 - автообновление и диагностика соединения.
 
 ### Ограничения i2pd RPC
 
-Доступны `torrent-add`, `torrent-get`, `torrent-remove`, `torrent-start` и `torrent-stop`. В ветке openssl — `files`, `wanted`, `priorities`, `percentDone`, `eta`, `trackers`, `trackerStats`, у пиров `clientName`/`progress`. `torrent-set`, правка трекеров, лимиты и magnet пока недоступны. Создавайте торрент в GUI или добавляйте готовый `.torrent`. Старт/стоп требуют i2pd openssl от 29 августа 2026 или новее.
+Доступны `torrent-add`, `torrent-get`, `torrent-remove`, `torrent-start` и `torrent-stop`. В ветке openssl `torrent-add` принимает `metainfo` (`.torrent`) и `filename` (магнит `xt=urn:btih:`). `torrent-get` отдаёт `files`, `wanted`, `priorities`, `percentDone`, `eta`, `trackers`, `trackerStats`, у пиров `clientName`/`progress`. `torrent-set`, правка трекеров и лимиты пока недоступны. Магниты требуют i2pd openssl от 3 сентября 2026, старт/стоп — от 29 августа 2026.
 
 ### Лицензия
 
