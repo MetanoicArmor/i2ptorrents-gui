@@ -21,6 +21,7 @@ private slots:
     void percentDoneAcceptsPercentScale();
     void parsesEtaAndTrackers();
     void parsesTrackerStats();
+    void magnetUriPrefersDaemonLink();
     void peerProgressLabel();
     void formatEtaHumanReadable();
     void humanReadableUnits();
@@ -264,6 +265,28 @@ void ModelsTests::parsesTrackerStats()
     QCOMPARE(trackers[0].leecherCount, qint64(3));
     QCOMPARE(trackers[0].lastAnnounceTime, qint64(1700000000));
     QCOMPARE(trackers[0].seederLabel(), QStringLiteral("12"));
+}
+
+void ModelsTests::magnetUriPrefersDaemonLink()
+{
+    const QString daemon =
+        QStringLiteral("magnet:?xt=urn:btih:0123456789ABCDEF0123456789ABCDEF01234567&dn=Demo&tr=http://tracker2.postman.i2p/announce.php");
+    const QJsonObject withLink{
+        {QStringLiteral("id"), 1},
+        {QStringLiteral("hashString"), QStringLiteral("0123456789abcdef0123456789abcdef01234567")},
+        {QStringLiteral("magnetLink"), daemon},
+    };
+    const std::optional<i2p::Torrent> fromDaemon = i2p::torrentFromRpc(withLink);
+    QVERIFY(fromDaemon.has_value());
+    QCOMPARE(fromDaemon->magnetUri(), daemon);
+
+    const QJsonObject hashOnly{
+        {QStringLiteral("id"), 2},
+        {QStringLiteral("hashString"), QStringLiteral("ABCDEF")},
+    };
+    const std::optional<i2p::Torrent> fallback = i2p::torrentFromRpc(hashOnly);
+    QVERIFY(fallback.has_value());
+    QCOMPARE(fallback->magnetUri(), QStringLiteral("magnet:?xt=urn:btih:abcdef"));
 }
 
 void ModelsTests::peerProgressLabel()

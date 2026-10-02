@@ -4921,7 +4921,7 @@ int layout_peers_table(QTableWidget *table, QVBoxLayout *layout, int dialog_w, i
     int col_up =
         peers_table_content_width(table, 3, metrics, QStringLiteral("999.9 KiB/s"), cell_pad);
     int col_flags =
-        peers_table_content_width(table, 4, metrics, QStringLiteral("IDU?"), cell_pad);
+        peers_table_content_width(table, 4, metrics, QStringLiteral("IDUXH"), cell_pad);
     int col_progress =
         peers_table_content_width(table, 5, metrics, QStringLiteral("100%"), cell_pad);
     col_down = std::max(col_down, 96);

@@ -51,6 +51,7 @@ trackers=http://tracker2.postman.i2p/announce.php
 torrentsdir=/path/to/torrents
 rpcport=9191
 rpcpath=mytorrents
+dht=true
 ```
 
 Do not change the tracker. Create `torrentsdir` and ensure the i2pd process can write to it.
@@ -209,7 +210,7 @@ Push a version tag matching `VERSION`, or run **Actions → Release → Run work
 
 ### i2pd RPC limits
 
-Current i2pd exposes `torrent-add`, `torrent-get`, `torrent-remove`, `torrent-start`, and `torrent-stop`. On the openssl branch, `torrent-add` accepts `metainfo` (`.torrent`) and `filename` (magnet `xt=urn:btih:` hex or Base32 hash). `torrent-get` returns `files`, `wanted`, `priorities`, `percentDone`, `eta`, `trackers`, `trackerStats`, and peer `clientName`/`progress` (BEP10). `wanted`/`priorities` are still stubs, and `torrent-set` is not implemented yet. Tracker edits and speed limits are not available. Magnets need i2pd openssl from 3 Sep 2026 or newer; start/stop need 29 Aug 2026 or newer.
+Current i2pd exposes `torrent-add`, `torrent-get`, `torrent-remove`, `torrent-start`, `torrent-stop`, and a limited `torrent-set`. On the openssl branch, `torrent-add` accepts `metainfo` (`.torrent`) and `filename` (magnet `xt=urn:btih:`). `torrent-get` returns `files`, `wanted`, `priorities`, `percentDone`, `eta`, `trackers`, `trackerStats`, `magnetLink` (name and tracker included, 1 Oct 2026), and peer `clientName`/`progress`/`flagStr` (origin: incoming, PEX, DHT). `wanted`/`priorities` are still stubs. `torrent-set` so far only adds a tracker to the tunnel (`trackerAdd`), not per-file skip or priority. Speed limits are not available. Magnets need i2pd openssl from 3 Sep 2026; `magnetLink` from 1 Oct 2026; start/stop from 29 Aug 2026.
 
 ### License
 
@@ -239,6 +240,7 @@ trackers=http://tracker2.postman.i2p/announce.php
 torrentsdir=/path/to/torrents
 rpcport=9191
 rpcpath=mytorrents
+dht=true
 ```
 
 Трекер менять не следует. Создайте `torrentsdir` и дайте процессу i2pd право записи.
@@ -388,7 +390,7 @@ ctest --test-dir build --output-on-failure
 
 ### Ограничения i2pd RPC
 
-Доступны `torrent-add`, `torrent-get`, `torrent-remove`, `torrent-start` и `torrent-stop`. В ветке openssl `torrent-add` принимает `metainfo` (`.torrent`) и `filename` (магнит `xt=urn:btih:`). `torrent-get` отдаёт `files`, `wanted`, `priorities`, `percentDone`, `eta`, `trackers`, `trackerStats`, у пиров `clientName`/`progress`. `torrent-set`, правка трекеров и лимиты пока недоступны. Магниты требуют i2pd openssl от 3 сентября 2026, старт/стоп — от 29 августа 2026.
+Доступны `torrent-add`, `torrent-get`, `torrent-remove`, `torrent-start`, `torrent-stop` и ограниченный `torrent-set`. В ветке openssl `torrent-add` принимает `metainfo` (`.torrent`) и `filename` (магнит `xt=urn:btih:`). `torrent-get` отдаёт `files`, `wanted`, `priorities`, `percentDone`, `eta`, `trackers`, `trackerStats`, `magnetLink` (имя и трекер, с 1 октября 2026), у пиров `clientName`/`progress`/`flagStr` (источник: входящий, PEX, DHT). `wanted`/`priorities` по-прежнему заглушки. `torrent-set` пока только добавляет трекер туннелю (`trackerAdd`), без пропуска и приоритета файлов. Лимиты скорости недоступны. Магниты — i2pd openssl от 3 сентября 2026, `magnetLink` — от 1 октября 2026, старт/стоп — от 29 августа 2026.
 
 ### Лицензия
 

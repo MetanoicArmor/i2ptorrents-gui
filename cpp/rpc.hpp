@@ -17,14 +17,14 @@ inline const char *RPC_FIELDS[] = {
     "id",            "name",            "status",         "isFinished",         "sizeWhenDone",
     "leftUntilDone", "rateDownload",    "rateUpload",     "peersGettingFromUs", "peersSendingToUs",
     "peers",         "pieceCount",      "pieceSize",      "totalSize",          "hashString",
-    "pieces",        "percentDone",     "eta",
+    "pieces",        "percentDone",     "eta",            "magnetLink",
 };
 
 inline const char *RPC_FILE_FIELDS[] = {"id", "files", "wanted", "priorities"};
 inline const char *RPC_PEER_FIELDS[] = {"id", "peers"};
 inline const char *RPC_TRACKER_FIELDS[] = {"id", "trackers", "trackerStats"};
 
-constexpr int RPC_FIELD_COUNT = 18;
+constexpr int RPC_FIELD_COUNT = 19;
 constexpr int RPC_FILE_FIELD_COUNT = 4;
 constexpr int RPC_PEER_FIELD_COUNT = 2;
 constexpr int RPC_TRACKER_FIELD_COUNT = 3;

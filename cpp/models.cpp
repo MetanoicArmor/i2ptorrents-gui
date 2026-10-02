@@ -378,6 +378,19 @@ double Torrent::progress() const
     return fromBytes;
 }
 
+QString Torrent::magnetUri() const
+{
+    const QString fromDaemon = magnetLink.trimmed();
+    if (!fromDaemon.isEmpty()) {
+        return fromDaemon;
+    }
+    const QString hash = hashString.trimmed();
+    if (hash.isEmpty()) {
+        return {};
+    }
+    return QStringLiteral("magnet:?xt=urn:btih:") + hash.toLower();
+}
+
 QString Torrent::shortHash() const
 {
     const QString digest = hashString.trimmed();
@@ -579,6 +592,7 @@ std::optional<Torrent> torrentFromRpc(const QJsonValue &data)
     torrent.pieceCount = jsonUInt64(valueOf(obj, "pieceCount", "piece_count")).value_or(0);
     torrent.pieceSize = jsonUInt64(valueOf(obj, "pieceSize", "piece_size")).value_or(0);
     torrent.hashString = jsonString(valueOf(obj, "hashString", "hash_string")).trimmed();
+    torrent.magnetLink = jsonString(valueOf(obj, "magnetLink", "magnet_link")).trimmed();
     torrent.finished = jsonTruthy(valueOf(obj, "isFinished", "is_finished")).value_or(false);
     torrent.percentDone = jsonDouble(valueOf(obj, "percentDone", "percent_done"));
     torrent.eta = jsonInt64(valueOf(obj, "eta", "eta")).value_or(-1);

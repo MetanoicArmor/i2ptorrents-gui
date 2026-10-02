@@ -525,10 +525,9 @@ void MainWindow::showActions(const Torrent &torrent, quintptr morePtr)
                          });
         popupAddAction(popup,
                          trKey(QStringLiteral("copy_magnet")),
-                         !torrent.hashString.isEmpty(),
-                         [hash = torrent.hashString]() {
-                             QApplication::clipboard()->setText(QStringLiteral("magnet:?xt=urn:btih:") +
-                                                                hash.toLower());
+                         !torrent.magnetUri().isEmpty(),
+                         [magnet = torrent.magnetUri()]() {
+                             QApplication::clipboard()->setText(magnet);
                          });
         popupAddAction(popup, trKey(QStringLiteral("open_folder")), true, [this, torrent]() {
             openFolder(settings_.torrentsDir, torrent.name);

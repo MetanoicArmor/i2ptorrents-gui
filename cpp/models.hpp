@@ -79,6 +79,7 @@ struct Torrent {
     quint64 pieceCount = 0;
     quint64 pieceSize = 0;
     QString hashString;
+    QString magnetLink;
     bool finished = false;
     std::optional<double> percentDone;
     qint64 eta = -1;
@@ -90,6 +91,7 @@ struct Torrent {
     double progress() const;
     QString shortHash() const;
     QString statusLabel() const;
+    QString magnetUri() const;
 };
 
 TorrentStatus torrentStatusFromRpc(qint64 value);

@@ -113,6 +113,7 @@ void RpcTests::getTorrentsOmitsPiecesInSimpleView()
     QVERIFY(names.contains(QStringLiteral("peers")));
     QVERIFY(names.contains(QStringLiteral("percentDone")));
     QVERIFY(names.contains(QStringLiteral("eta")));
+    QVERIFY(names.contains(QStringLiteral("magnetLink")));
     QVERIFY(!names.contains(QStringLiteral("files")));
 }
 
