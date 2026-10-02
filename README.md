@@ -1,4 +1,10 @@
 <p align="center">
+  <a href="#en"><strong>English</strong></a>
+  &nbsp;·&nbsp;
+  <a href="#ru"><strong>Русский</strong></a>
+</p>
+
+<p align="center">
   <img src="image.png" alt="I2P Torrents" width="160" />
 </p>
 
@@ -6,7 +12,7 @@
 
 <p align="center">
   Cross-platform desktop GUI for the built-in <a href="https://i2pd.website">i2pd</a> torrent client<br>
-  <a href="#english">English</a> · <a href="#русский">Русский</a>
+  Кроссплатформенный GUI для встроенного torrent-клиента <a href="https://i2pd.website">i2pd</a>
 </p>
 
 <p align="center">
@@ -35,7 +41,11 @@
 
 ---
 
+<a id="en"></a>
+
 ## English
+
+<p align="right"><a href="#ru">Русский →</a></p>
 
 A desktop client for i2pd’s torrent tunnel, built with **C++17** and **Qt 6 Widgets**. The UI follows the look of [I2PChat-ng](https://github.com/MetanoicArmor/I2PChat-ng): light and night themes, cards, a compact sidebar, and native behaviour on Linux, Windows, and macOS.
 
@@ -226,7 +236,11 @@ Current i2pd exposes `torrent-add`, `torrent-get`, `torrent-remove`, `torrent-st
 
 ---
 
+<a id="ru"></a>
+
 ## Русский
+
+<p align="right"><a href="#en">← English</a></p>
 
 Кроссплатформенный настольный клиент для встроенного torrent-клиента i2pd на **C++17** и **Qt 6 Widgets**. Интерфейс в стиле [I2PChat-ng](https://github.com/MetanoicArmor/I2PChat-ng): светлая и ночная темы, карточки, компактная боковая панель.
 
