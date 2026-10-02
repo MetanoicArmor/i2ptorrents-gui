@@ -90,6 +90,16 @@ QString normalizeView(const QString &value)
     return QStringLiteral("detailed");
 }
 
+QString normalizeCatalogProxy(const QString &value)
+{
+    const QString raw = value.trimmed().toLower();
+    if (raw == QLatin1String("socks") || raw == QLatin1String("socks5") ||
+        raw == QLatin1String("socks5h")) {
+        return QStringLiteral("socks5");
+    }
+    return QStringLiteral("http");
+}
+
 QString migrateProxy(const QString &value)
 {
     const QString raw = value.trimmed();
@@ -124,6 +134,12 @@ AppSettings AppSettings::loadFrom(const QString &path)
         normalizeView(jsonString(obj.value(QStringLiteral("torrent_view")), defaults.torrentView));
     settings.httpProxy =
         migrateProxy(jsonString(obj.value(QStringLiteral("http_proxy")), defaults.httpProxy));
+    settings.catalogProxy = normalizeCatalogProxy(
+        jsonString(obj.value(QStringLiteral("catalog_proxy")), defaults.catalogProxy));
+    settings.httpProxyPort = static_cast<quint16>(
+        std::clamp(jsonUInt(obj.value(QStringLiteral("http_proxy_port")), defaults.httpProxyPort),
+                   quint32(1),
+                   quint32(65535)));
     settings.windowWidth =
         std::max(jsonUInt(obj.value(QStringLiteral("window_width")), DEFAULT_WINDOW_WIDTH),
                  quint32(MIN_WINDOW_WIDTH));
@@ -149,6 +165,8 @@ bool AppSettings::saveTo(const QString &path) const
     obj.insert(QStringLiteral("language"), language);
     obj.insert(QStringLiteral("torrent_view"), torrentView);
     obj.insert(QStringLiteral("http_proxy"), httpProxy);
+    obj.insert(QStringLiteral("catalog_proxy"), normalizeCatalogProxy(catalogProxy));
+    obj.insert(QStringLiteral("http_proxy_port"), static_cast<int>(httpProxyPort));
     obj.insert(QStringLiteral("window_width"), static_cast<int>(windowWidth));
     obj.insert(QStringLiteral("window_height"), static_cast<int>(windowHeight));
 
@@ -204,7 +222,9 @@ bool operator==(const AppSettings &lhs, const AppSettings &rhs)
     return lhs.rpcUrl == rhs.rpcUrl && lhs.torrentsDir == rhs.torrentsDir
            && lhs.refreshSeconds == rhs.refreshSeconds && lhs.theme == rhs.theme
            && lhs.language == rhs.language && lhs.torrentView == rhs.torrentView
-           && lhs.httpProxy == rhs.httpProxy && lhs.windowWidth == rhs.windowWidth
+           && lhs.httpProxy == rhs.httpProxy && lhs.catalogProxy == rhs.catalogProxy
+           && lhs.httpProxyPort == rhs.httpProxyPort
+           && lhs.windowWidth == rhs.windowWidth
            && lhs.windowHeight == rhs.windowHeight;
 }
 

@@ -25,6 +25,7 @@ set(I2P_CORE_SOURCES
     cpp/models.cpp
     cpp/piece_map.cpp
     cpp/rpc.cpp
+    cpp/postman_catalog.cpp
     cpp/resources.cpp
 )
 
@@ -88,6 +89,7 @@ qt_add_executable(i2ptorrents-tests
     tests/test_piece_map.cpp
     tests/test_i2pd_tunnels.cpp
     tests/test_torrent_create.cpp
+    tests/test_postman_catalog.cpp
     ${I2P_CORE_SOURCES}
     assets/resources.qrc
 )

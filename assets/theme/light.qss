@@ -8,6 +8,9 @@ QFrame#Sidebar, QWidget#Sidebar {
 QFrame#Surface, QWidget#Surface {
     background: #ffffff; border: none;
 }
+QStackedWidget#SurfaceStack, QWidget#LibraryPage, QWidget#CatalogPage {
+    background: transparent; border: none;
+}
 QWidget#PaneSplit { background: #d8d8dc; border: none; max-width: 1px; }
 QFrame#TorrentCard, QFrame#SummaryCard, QWidget#TorrentCard, QWidget#SummaryCard {
     background: #f2f2f7; border: none; border-radius: 10px;
@@ -20,6 +23,7 @@ QLabel#TorrentName { color: #1d1d1f; font-size: 14px; font-weight: 600; padding:
 QLabel#Secondary, QLabel#PeersLink, QLabel#StatusText { color: #626875; font-size: 12px; padding: 0px; }
 QLabel#StatusOnline { color: #245039; background: #d7ebdc; border-radius: 10px; padding: 6px 12px; }
 QLabel#StatusOffline { color: #7c302c; background: #f2d8d7; border-radius: 10px; padding: 6px 12px; }
+QLabel#CatalogNotice { color: #0a3d7a; background: #d6e8ff; border-radius: 10px; padding: 6px 12px; }
 QPushButton, QToolButton {
     background: #f8f9fc; border: none; border-radius: 9px; padding: 8px 14px; color: #20232b;
 }

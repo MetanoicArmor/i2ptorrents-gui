@@ -414,6 +414,13 @@ std::optional<SettingsResult> settingsExec(QWidget *parent,
         utf8.add(trKey(QStringLiteral("refresh_interval"))),
         utf8.add(trKey(QStringLiteral("seconds_suffix"))),
         static_cast<int>(std::clamp(display.refreshSeconds, quint32(2), quint32(60))),
+        utf8.add(trKey(QStringLiteral("http_proxy_port"))),
+        utf8.add(trKey(QStringLiteral("http_proxy_port_tip"))),
+        static_cast<int>(std::clamp(display.httpProxyPort, quint16(1), quint16(65535))),
+        utf8.add(trKey(QStringLiteral("catalog_proxy"))),
+        utf8.add(trKey(QStringLiteral("catalog_proxy_http"))),
+        utf8.add(trKey(QStringLiteral("catalog_proxy_socks"))),
+        utf8.add(normalizeCatalogProxy(display.catalogProxy)),
         utf8.add(trKey(QStringLiteral("language"))),
         utf8.add(trKey(QStringLiteral("language_name_en"))),
         utf8.add(trKey(QStringLiteral("language_name_ru"))),
@@ -445,6 +452,9 @@ std::optional<SettingsResult> settingsExec(QWidget *parent,
     result.torrentsDir = QString::fromUtf8(i2p_settings_dir());
     result.refreshSeconds =
         static_cast<quint32>(std::clamp(i2p_settings_refresh(), 2, 60));
+    result.httpProxyPort =
+        static_cast<quint16>(std::clamp(i2p_settings_proxy_port(), 1, 65535));
+    result.catalogProxy = normalizeCatalogProxy(QString::fromUtf8(i2p_settings_proxy_kind()));
     result.language = QString::fromUtf8(i2p_settings_language());
     result.theme = QString::fromUtf8(i2p_settings_theme());
     result.torrentView = QString::fromUtf8(i2p_settings_view());

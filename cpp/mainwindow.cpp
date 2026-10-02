@@ -10,15 +10,19 @@
 #include <QApplication>
 #include <QClipboard>
 #include <QCloseEvent>
+#include <QComboBox>
 #include <QDesktopServices>
 #include <QFile>
 #include <QFileInfo>
+#include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QProgressBar>
 #include <QPushButton>
+#include <QSignalBlocker>
+#include <QStackedWidget>
 #include <QThread>
 #include <QToolButton>
 #include <QUrl>
@@ -31,6 +35,43 @@ namespace {
 
 constexpr int ARROW_CURSOR = 0;
 constexpr int WHATS_THIS_CURSOR = 4;
+
+PostmanProxy catalogProxy(const AppSettings &settings)
+{
+    PostmanProxy proxy;
+    proxy.socks = normalizeCatalogProxy(settings.catalogProxy) == QLatin1String("socks5");
+    proxy.port = settings.httpProxyPort == 0 ? POSTMAN_PROXY_PORT : static_cast<int>(settings.httpProxyPort);
+    return proxy;
+}
+
+QString torrentFileName(const QString &name)
+{
+    QString file = name.trimmed();
+    if (file.isEmpty()) {
+        return QStringLiteral("download.torrent");
+    }
+    for (QChar &ch : file) {
+        switch (ch.unicode()) {
+        case '/':
+        case '\\':
+        case ':':
+        case '*':
+        case '?':
+        case '"':
+        case '<':
+        case '>':
+        case '|':
+            ch = QLatin1Char('_');
+            break;
+        default:
+            break;
+        }
+    }
+    if (!file.endsWith(QStringLiteral(".torrent"), Qt::CaseInsensitive)) {
+        file += QStringLiteral(".torrent");
+    }
+    return file;
+}
 
 } // namespace
 
@@ -93,6 +134,14 @@ MainWindow::MainWindow(QWidget *parent)
         *filter.slot = button;
         side->addWidget(button);
     }
+    side->addSpacing(14);
+    trackerSectionLabel_ = new QLabel(trKey(QStringLiteral("section_tracker")), sidebar_);
+    trackerSectionLabel_->setObjectName(QStringLiteral("SectionTitle"));
+    side->addWidget(trackerSectionLabel_);
+    postmanButton_ = new QPushButton(trKey(QStringLiteral("postman")), sidebar_);
+    postmanButton_->setObjectName(QStringLiteral("Filter"));
+    setCheckable(postmanButton_, true);
+    side->addWidget(postmanButton_);
     side->addStretch();
     aboutButton_ = new QPushButton(trKey(QStringLiteral("about")), sidebar_);
     aboutButton_->setObjectName(QStringLiteral("AboutButton"));
@@ -113,7 +162,18 @@ MainWindow::MainWindow(QWidget *parent)
     body->setContentsMargins(0, 0, 0, 0);
     body->setSpacing(0);
 
-    auto *head = new QWidget(surface_);
+    stack_ = new QStackedWidget(surface_);
+    stack_->setObjectName(QStringLiteral("SurfaceStack"));
+    stack_->setFrameShape(QFrame::NoFrame);
+    body->addWidget(stack_);
+
+    auto *libraryPage = new QWidget(stack_);
+    libraryPage->setObjectName(QStringLiteral("LibraryPage"));
+    auto *libraryLayout = new QVBoxLayout(libraryPage);
+    libraryLayout->setContentsMargins(0, 0, 0, 0);
+    libraryLayout->setSpacing(0);
+
+    auto *head = new QWidget(libraryPage);
     auto *headLayout = new QVBoxLayout(head);
     headLayout->setContentsMargins(18, 0, 18, 0);
 #if defined(Q_OS_MACOS)
@@ -148,25 +208,71 @@ MainWindow::MainWindow(QWidget *parent)
     summaryLabel_ = new QLabel(head);
     summaryLabel_->setObjectName(QStringLiteral("Secondary"));
     headLayout->addWidget(summaryLabel_);
-    body->addWidget(head);
+    libraryLayout->addWidget(head);
 
     NativeWidget overlay = NativeWidget::overlayScroll();
     scrollHost_ = overlay.widget();
     scrollHost_->setObjectName(QStringLiteral("TorrentScroll"));
     scrollPtr_ = reinterpret_cast<quintptr>(scrollHost_);
-    body->addWidget(scrollHost_, 1);
-    overlay.releaseOwnership(); // child of surface_
+    libraryLayout->addWidget(scrollHost_, 1);
+    overlay.releaseOwnership();
+    stack_->addWidget(libraryPage);
+    buildCatalogPage();
 
     outer->addWidget(surface_, 1);
 
     connect(filterButtons_[0], &QPushButton::clicked, this, &MainWindow::dispatchFilterAll);
     connect(filterButtons_[1], &QPushButton::clicked, this, &MainWindow::dispatchFilterDownloading);
     connect(filterButtons_[2], &QPushButton::clicked, this, &MainWindow::dispatchFilterSeeding);
+    connect(postmanButton_, &QPushButton::clicked, this, &MainWindow::dispatchPostman);
     connect(aboutButton_, &QPushButton::clicked, this, &MainWindow::dispatchAbout);
     connect(settingsButton_, &QPushButton::clicked, this, &MainWindow::dispatchSettings);
     connect(refreshButton_, &QToolButton::clicked, this, &MainWindow::dispatchRefresh);
     connect(createButton_, &QPushButton::clicked, this, &MainWindow::dispatchCreate);
     connect(addButton_, &QPushButton::clicked, this, &MainWindow::dispatchAdd);
+    connect(catalogSearch_, &QLineEdit::returnPressed, this, [this]() {
+        if (catalogBusy_) {
+            return;
+        }
+        catalogQuery_.search = catalogSearch_->text().trimmed();
+        catalogQuery_.start = 0;
+        spawnCatalog();
+    });
+    connect(catalogCategory_, &QComboBox::currentIndexChanged, this, [this](int) {
+        if (catalogBusy_) {
+            return;
+        }
+        catalogQuery_.category = catalogCategory_->currentData().toInt();
+        catalogQuery_.start = 0;
+        spawnCatalog();
+    });
+    connect(catalogOrder_, &QComboBox::currentIndexChanged, this, [this](int) {
+        if (catalogBusy_) {
+            return;
+        }
+        catalogQuery_.orderBy = catalogOrder_->currentData().toInt();
+        catalogQuery_.start = 0;
+        spawnCatalog();
+    });
+    connect(catalogRefresh_, &QToolButton::clicked, this, [this]() {
+        if (!catalogBusy_) {
+            spawnCatalog();
+        }
+    });
+    connect(catalogPrevButton_, &QPushButton::clicked, this, [this]() {
+        if (catalogPageData_.prevStart < 0) {
+            return;
+        }
+        catalogQuery_.start = catalogPageData_.prevStart;
+        spawnCatalog();
+    });
+    connect(catalogNextButton_, &QPushButton::clicked, this, [this]() {
+        if (catalogPageData_.nextStart < 0) {
+            return;
+        }
+        catalogQuery_.start = catalogPageData_.nextStart;
+        spawnCatalog();
+    });
 
     addShortcut(this, QStringLiteral("Ctrl+T"), [this] { dispatchAdd(); });
     addShortcut(this, QStringLiteral("Ctrl+O"), [this] { dispatchOpen(); });
@@ -219,8 +325,18 @@ void MainWindow::applyChrome()
     applyWindowMaterial(this, settings_.theme);
     applyTooltipPalette(settings_.theme);
     overlayApplyTheme(scrollPtr_, settings_.theme);
+    if (catalogScrollPtr_ != 0) {
+        overlayApplyTheme(catalogScrollPtr_, settings_.theme);
+    }
     setLabelText(reinterpret_cast<quintptr>(subtitleLabel_), trKey(QStringLiteral("subtitle")));
     setLabelText(reinterpret_cast<quintptr>(sectionLabel_), trKey(QStringLiteral("section_torrents")));
+    if (trackerSectionLabel_ != nullptr) {
+        setLabelText(reinterpret_cast<quintptr>(trackerSectionLabel_), trKey(QStringLiteral("section_tracker")));
+    }
+    if (postmanButton_ != nullptr) {
+        setButtonText(reinterpret_cast<quintptr>(postmanButton_), trKey(QStringLiteral("postman")));
+    }
+    fillCatalogCombos();
     setButtonText(reinterpret_cast<quintptr>(filterButtons_[0]), trKey(QStringLiteral("filter_all")));
     setButtonText(reinterpret_cast<quintptr>(filterButtons_[1]), trKey(QStringLiteral("filter_downloading")));
     setButtonText(reinterpret_cast<quintptr>(filterButtons_[2]), trKey(QStringLiteral("filter_seeding")));
@@ -236,7 +352,21 @@ void MainWindow::applyChrome()
                                                  {QStringLiteral("Ctrl+,"), QStringLiteral("Ctrl+S")}));
     setButtonText(reinterpret_cast<quintptr>(aboutButton_), trKey(QStringLiteral("about")));
     setPlaceholderPtr(reinterpret_cast<quintptr>(searchEdit_), trKey(QStringLiteral("search_placeholder")));
+    if (catalogSearch_ != nullptr) {
+        setPlaceholderPtr(reinterpret_cast<quintptr>(catalogSearch_),
+                          trKey(QStringLiteral("postman_search_placeholder")));
+    }
+    if (catalogRefresh_ != nullptr) {
+        catalogRefresh_->setToolTip(trKey(QStringLiteral("refresh")));
+    }
+    if (catalogPrevButton_ != nullptr) {
+        setButtonText(reinterpret_cast<quintptr>(catalogPrevButton_), trKey(QStringLiteral("postman_prev")));
+        setButtonText(reinterpret_cast<quintptr>(catalogNextButton_), trKey(QStringLiteral("postman_next")));
+    }
     refreshButton_->setToolTip(trKey(QStringLiteral("refresh")));
+    if (catalogMode_) {
+        renderCatalog();
+    }
 }
 
 void MainWindow::setStatus()
@@ -291,6 +421,10 @@ void MainWindow::setStatus()
 void MainWindow::setFilter(const QString &name)
 {
     filter_ = name;
+    catalogMode_ = false;
+    if (stack_ != nullptr) {
+        stack_->setCurrentIndex(0);
+    }
     const QStringList keys = {QStringLiteral("all"), QStringLiteral("downloading"), QStringLiteral("seeding")};
     for (int index = 0; index < 3; ++index) {
         setChecked(reinterpret_cast<quintptr>(filterButtons_[index]), keys[index] == filter_);
@@ -786,6 +920,9 @@ void MainWindow::startAddMagnet(const QString &magnet)
     adding_ = true;
     statusMode_ = QStringLiteral("copying");
     setStatus();
+    if (!pendingCatalogName_.isEmpty()) {
+        showAddingNotice(pendingCatalogName_);
+    }
 
     const QString rpcUrl = settings_.rpcUrl;
     const QString payload = *normalized;
@@ -890,9 +1027,14 @@ void MainWindow::openSettingsDialog()
             return;
         }
 
+        const bool proxyChanged = settings_.httpProxyPort != result->httpProxyPort ||
+                                  normalizeCatalogProxy(settings_.catalogProxy) !=
+                                      normalizeCatalogProxy(result->catalogProxy);
         settings_.rpcUrl = result->rpcUrl;
         settings_.torrentsDir = result->torrentsDir;
         settings_.refreshSeconds = result->refreshSeconds;
+        settings_.httpProxyPort = result->httpProxyPort;
+        settings_.catalogProxy = normalizeCatalogProxy(result->catalogProxy);
         settings_.language = result->language;
         settings_.theme = result->theme;
         settings_.torrentView = result->torrentView.isEmpty() ? QStringLiteral("detailed") : result->torrentView;
@@ -915,6 +1057,10 @@ void MainWindow::openSettingsDialog()
         refreshTimer_.start(static_cast<int>(std::max(settings_.refreshSeconds, quint32(2)) * 1000));
         applyChrome();
         renderCards();
+        if (proxyChanged && catalogMode_) {
+            catalogLoaded_ = false;
+            spawnCatalog();
+        }
         spawnRefresh();
     });
 }
@@ -971,12 +1117,19 @@ void MainWindow::dispatchFilterSeeding()
     setFilter(QStringLiteral("seeding"));
 }
 
+void MainWindow::dispatchPostman()
+{
+    showCatalog();
+}
+
 void MainWindow::pollWorker()
 {
     const QString query = lineEditText(reinterpret_cast<quintptr>(searchEdit_));
     if (query != searchCache_) {
         searchCache_ = query;
-        renderCards();
+        if (!catalogMode_) {
+            renderCards();
+        }
     }
 }
 
@@ -1000,18 +1153,36 @@ void MainWindow::onAddedReady(std::optional<QString> savedPath, QString error, b
 {
     adding_ = false;
     if (error.isEmpty()) {
+        pendingCatalogId_ = 0;
+        pendingCatalogName_.clear();
         if (savedPath.has_value()) {
             QMessageBox::information(this,
                                      trKey(QStringLiteral("added_title")),
                                      trArgs(QStringLiteral("added_body"),
                                             {{QStringLiteral("path"), *savedPath}}));
         }
+        if (catalogMode_) {
+            renderCatalog();
+        }
         spawnRefresh();
         return;
     }
+    if (magnet && rpcMagnetUnsupported(error) && pendingCatalogId_ > 0) {
+        const qint64 id = pendingCatalogId_;
+        const QString name = pendingCatalogName_;
+        pendingCatalogId_ = 0;
+        pendingCatalogName_.clear();
+        startAddCatalogFile(id, name, true);
+        return;
+    }
+    pendingCatalogId_ = 0;
+    pendingCatalogName_.clear();
     const QString text =
         magnet && rpcMagnetUnsupported(error) ? trKey(QStringLiteral("add_magnet_unsupported")) : error;
     QMessageBox::warning(this, trKey(QStringLiteral("add_failed")), text);
+    if (catalogMode_) {
+        renderCatalog();
+    }
     spawnRefresh();
 }
 
@@ -1034,6 +1205,346 @@ void MainWindow::onStartStopReady(QString error, bool start)
         return;
     }
     spawnRefresh();
+}
+
+void MainWindow::buildCatalogPage()
+{
+    auto *page = new QWidget(stack_);
+    page->setObjectName(QStringLiteral("CatalogPage"));
+    auto *layout = new QVBoxLayout(page);
+    layout->setContentsMargins(0, 0, 0, 0);
+    layout->setSpacing(0);
+
+    auto *head = new QWidget(page);
+    auto *headLayout = new QVBoxLayout(head);
+#if defined(Q_OS_MACOS)
+    headLayout->setContentsMargins(18, 14, 18, 0);
+#else
+    headLayout->setContentsMargins(18, 16, 18, 0);
+#endif
+    headLayout->setSpacing(12);
+
+    auto *controls = new QWidget(head);
+    auto *row = new QHBoxLayout(controls);
+    row->setContentsMargins(0, 0, 0, 0);
+    row->setSpacing(8);
+    catalogSearch_ = new QLineEdit(controls);
+    catalogSearch_->setObjectName(QStringLiteral("Search"));
+    catalogSearch_->setClearButtonEnabled(true);
+    row->addWidget(catalogSearch_, 1);
+    catalogCategory_ = new QComboBox(controls);
+    catalogCategory_->setMinimumWidth(140);
+    catalogCategory_->setMaximumWidth(200);
+    row->addWidget(catalogCategory_);
+    catalogOrder_ = new QComboBox(controls);
+    catalogOrder_->setMinimumWidth(130);
+    catalogOrder_->setMaximumWidth(180);
+    row->addWidget(catalogOrder_);
+    catalogRefresh_ = new QToolButton(controls);
+    catalogRefresh_->setObjectName(QStringLiteral("RefreshButton"));
+    catalogRefresh_->setText(QStringLiteral("↻"));
+    row->addWidget(catalogRefresh_);
+    headLayout->addWidget(controls);
+
+    catalogStatusLabel_ = new QLabel(head);
+    catalogStatusLabel_->setObjectName(QStringLiteral("Secondary"));
+    catalogStatusLabel_->setWordWrap(true);
+    headLayout->addWidget(catalogStatusLabel_);
+    layout->addWidget(head);
+
+    NativeWidget overlay = NativeWidget::overlayScroll();
+    QWidget *scroll = overlay.widget();
+    scroll->setObjectName(QStringLiteral("TorrentScroll"));
+    catalogScrollPtr_ = reinterpret_cast<quintptr>(scroll);
+    layout->addWidget(scroll, 1);
+    overlay.releaseOwnership();
+
+    auto *pagerHost = new QWidget(page);
+    auto *pager = new QHBoxLayout(pagerHost);
+    pager->setContentsMargins(18, 8, 18, 14);
+    catalogPrevButton_ = new QPushButton(trKey(QStringLiteral("postman_prev")), pagerHost);
+    catalogNextButton_ = new QPushButton(trKey(QStringLiteral("postman_next")), pagerHost);
+    catalogPageLabel_ = new QLabel(pagerHost);
+    catalogPageLabel_->setObjectName(QStringLiteral("Secondary"));
+    pager->addWidget(catalogPrevButton_);
+    pager->addStretch();
+    pager->addWidget(catalogPageLabel_);
+    pager->addStretch();
+    pager->addWidget(catalogNextButton_);
+    layout->addWidget(pagerHost);
+
+    stack_->addWidget(page);
+    fillCatalogCombos();
+}
+
+void MainWindow::fillCatalogCombos()
+{
+    if (catalogCategory_ == nullptr || catalogOrder_ == nullptr) {
+        return;
+    }
+    const int category = catalogCategory_->count() == 0 ? catalogQuery_.category
+                                                        : catalogCategory_->currentData().toInt();
+    const int order =
+        catalogOrder_->count() == 0 ? catalogQuery_.orderBy : catalogOrder_->currentData().toInt();
+    const QSignalBlocker blockCategory(catalogCategory_);
+    const QSignalBlocker blockOrder(catalogOrder_);
+    catalogCategory_->clear();
+    for (const PostmanCategory &item : postmanCategories()) {
+        const QString label = item.labelKey != nullptr ? trKey(QString::fromUtf8(item.labelKey))
+                                                       : QString::fromUtf8(item.label);
+        catalogCategory_->addItem(label, item.id);
+    }
+    catalogOrder_->clear();
+    for (const PostmanSort &item : postmanSorts()) {
+        catalogOrder_->addItem(trKey(QString::fromUtf8(item.labelKey)), item.id);
+    }
+    const int categoryIndex = catalogCategory_->findData(category);
+    catalogCategory_->setCurrentIndex(categoryIndex < 0 ? 0 : categoryIndex);
+    const int orderIndex = catalogOrder_->findData(order);
+    catalogOrder_->setCurrentIndex(orderIndex < 0 ? 0 : orderIndex);
+}
+
+void MainWindow::showCatalog()
+{
+    catalogMode_ = true;
+    if (stack_ != nullptr) {
+        stack_->setCurrentIndex(1);
+    }
+    if (postmanButton_ != nullptr) {
+        setChecked(reinterpret_cast<quintptr>(postmanButton_), true);
+    }
+    renderCatalog();
+    if (!catalogLoaded_) {
+        spawnCatalog();
+    }
+}
+
+void MainWindow::spawnCatalog()
+{
+    if (catalogBusy_) {
+        return;
+    }
+    catalogBusy_ = true;
+    catalogError_.clear();
+    renderCatalog();
+    const PostmanQuery query = catalogQuery_;
+    const PostmanProxy proxy = catalogProxy(settings_);
+    const QString lang = language();
+    QThread *thread = QThread::create([this, query, proxy, lang]() {
+        setLanguage(lang);
+        QString error;
+        const PostmanPage page = catalog_.fetch(query, proxy, &error);
+        QMetaObject::invokeMethod(
+            this, [this, page, error]() { onCatalogReady(page, error); }, Qt::QueuedConnection);
+    });
+    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+    thread->start();
+}
+
+void MainWindow::onCatalogReady(PostmanPage page, QString error)
+{
+    catalogBusy_ = false;
+    catalogLoaded_ = true;
+    catalogError_ = error;
+    if (error.isEmpty()) {
+        catalogPageData_ = std::move(page);
+    } else if (catalogPageData_.rows.isEmpty()) {
+        catalogPageData_.start = catalogQuery_.start;
+        catalogPageData_.nextStart = -1;
+        catalogPageData_.prevStart = -1;
+    }
+    renderCatalog();
+}
+
+void MainWindow::renderCatalog()
+{
+    if (catalogScrollPtr_ == 0) {
+        return;
+    }
+    const bool busy = catalogBusy_;
+    catalogRefresh_->setEnabled(!busy);
+    catalogCategory_->setEnabled(!busy);
+    catalogOrder_->setEnabled(!busy);
+    catalogPrevButton_->setEnabled(!busy && catalogPageData_.prevStart >= 0);
+    catalogNextButton_->setEnabled(!busy && catalogPageData_.nextStart >= 0);
+
+    QString status;
+    if (busy) {
+        status = trKey(QStringLiteral("postman_loading"));
+    } else if (!catalogError_.isEmpty()) {
+        status = catalogError_;
+    } else {
+        status = trArgs(QStringLiteral("postman_summary"),
+                        {{QStringLiteral("count"), QString::number(catalogPageData_.rows.size())}});
+    }
+    if (!adding_) {
+        const bool inHeader = !catalogPageData_.rows.isEmpty();
+        catalogStatusLabel_->setVisible(inHeader);
+        if (inHeader) {
+            setObjectNamePtr(reinterpret_cast<quintptr>(catalogStatusLabel_), QStringLiteral("Secondary"));
+            setLabelText(reinterpret_cast<quintptr>(catalogStatusLabel_), status);
+        }
+    }
+
+    QString range = QStringLiteral("—");
+    if (!catalogPageData_.rows.isEmpty()) {
+        range = trArgs(QStringLiteral("postman_range"),
+                       {{QStringLiteral("from"), QString::number(catalogPageData_.start + 1)},
+                        {QStringLiteral("to"),
+                         QString::number(catalogPageData_.start + catalogPageData_.rows.size())}});
+    }
+    setLabelText(reinterpret_cast<quintptr>(catalogPageLabel_), range);
+
+    auto *cards = new QWidget;
+    auto *layout = new QVBoxLayout(cards);
+    layout->setContentsMargins(18, 12, 14, 16);
+    layout->setSpacing(12);
+    if (catalogPageData_.rows.isEmpty()) {
+        const QString text = !catalogError_.isEmpty() ? catalogError_
+                             : busy                   ? trKey(QStringLiteral("postman_loading"))
+                                                      : trKey(QStringLiteral("postman_empty"));
+        auto *empty = new QLabel(text, cards);
+        empty->setObjectName(QStringLiteral("Secondary"));
+        empty->setWordWrap(true);
+        layout->addWidget(empty);
+    } else {
+        for (const PostmanTorrent &item : catalogPageData_.rows) {
+            layout->addWidget(makeCatalogCard(item));
+        }
+    }
+    layout->addStretch();
+    overlaySetWidget(catalogScrollPtr_, cards);
+}
+
+QWidget *MainWindow::makeCatalogCard(const PostmanTorrent &item)
+{
+    NativeWidget card = NativeWidget::torrentCard(settings_.theme);
+    QWidget *cardWidget = card.widget();
+    auto *root = new QVBoxLayout(cardWidget);
+    root->setContentsMargins(14, 11, 14, 11);
+    root->setSpacing(6);
+
+    auto *name = new QLabel(item.name, cardWidget);
+    name->setObjectName(QStringLiteral("TorrentName"));
+    name->setWordWrap(true);
+    root->addWidget(name);
+
+    QStringList meta;
+    if (!item.category.isEmpty()) {
+        meta << item.category;
+    }
+    if (!item.sizeText.isEmpty()) {
+        meta << item.sizeText;
+    }
+    if (item.seeders >= 0) {
+        meta << trArgs(QStringLiteral("postman_swarm"),
+                       {{QStringLiteral("seeds"), QString::number(item.seeders)},
+                        {QStringLiteral("leech"), QString::number(item.leechers)}});
+    }
+    if (!item.added.isEmpty()) {
+        meta << item.added;
+    }
+    auto *details = new QLabel(meta.join(QStringLiteral("  ·  ")), cardWidget);
+    details->setObjectName(QStringLiteral("Secondary"));
+    details->setWordWrap(true);
+    root->addWidget(details);
+
+    auto *actions = new QWidget(cardWidget);
+    auto *actionRow = new QHBoxLayout(actions);
+    actionRow->setContentsMargins(0, 0, 0, 0);
+    actionRow->setSpacing(8);
+    actionRow->addStretch();
+    auto *open = new QPushButton(trKey(QStringLiteral("postman_open")), actions);
+    open->setEnabled(item.id > 0 || !item.magnet.isEmpty());
+    actionRow->addWidget(open);
+    auto *add = new QPushButton(trKey(QStringLiteral("postman_add")), actions);
+    add->setObjectName(QStringLiteral("Primary"));
+    actionRow->addWidget(add);
+    root->addWidget(actions);
+    connect(open, &QPushButton::clicked, this, [item]() {
+        if (item.id > 0) {
+            QUrl url(QString::fromLatin1(POSTMAN_ORIGIN) + QStringLiteral("index.php"));
+            url.setQuery(QStringLiteral("view=TorrentDetail&id=%1").arg(item.id));
+            QDesktopServices::openUrl(url);
+            return;
+        }
+        QDesktopServices::openUrl(QUrl(item.magnet));
+    });
+    connect(add, &QPushButton::clicked, this, [this, item]() { addCatalogItem(item); });
+    card.releaseOwnership();
+    return cardWidget;
+}
+
+void MainWindow::addCatalogItem(const PostmanTorrent &item)
+{
+    if (adding_) {
+        return;
+    }
+    const bool rpcUp = statusMode_ == QStringLiteral("online") || statusMode_ == QStringLiteral("updating");
+    QString parseError;
+    const bool magnetOk = normalizeMagnetLink(item.magnet, &parseError).has_value();
+    if (!magnetOk || !rpcUp) {
+        if (item.id > 0) {
+            startAddCatalogFile(item.id, item.name, false);
+            return;
+        }
+        QMessageBox::warning(this,
+                             trKey(QStringLiteral("add_magnet_title")),
+                             parseError.isEmpty() ? trKey(QStringLiteral("add_magnet_needs_rpc")) : parseError);
+        return;
+    }
+    pendingCatalogId_ = item.id;
+    pendingCatalogName_ = item.name;
+    startAddMagnet(item.magnet);
+}
+
+void MainWindow::showAddingNotice(const QString &name)
+{
+    if (catalogStatusLabel_ == nullptr) {
+        return;
+    }
+    catalogStatusLabel_->setVisible(true);
+    const QString title = name.trimmed().isEmpty() ? trKey(QStringLiteral("postman_add")) : name.trimmed();
+    setObjectNamePtr(reinterpret_cast<quintptr>(catalogStatusLabel_), QStringLiteral("CatalogNotice"));
+    setLabelText(reinterpret_cast<quintptr>(catalogStatusLabel_),
+                 trArgs(QStringLiteral("postman_adding"), {{QStringLiteral("name"), title}}));
+}
+
+void MainWindow::startAddCatalogFile(qint64 id, const QString &name, bool rpcOnline)
+{
+    if (adding_ || id <= 0) {
+        return;
+    }
+    adding_ = true;
+    statusMode_ = QStringLiteral("copying");
+    setStatus();
+    showAddingNotice(name);
+    const QString lang = language();
+    const PostmanProxy proxy = catalogProxy(settings_);
+    QThread *thread = QThread::create([this, id, name, rpcOnline, lang, proxy]() {
+        setLanguage(lang);
+        QString error;
+        const QByteArray bytes = catalog_.downloadTorrent(id, proxy, &error);
+        QMetaObject::invokeMethod(
+            this,
+            [this, bytes, error, name, rpcOnline]() {
+                adding_ = false;
+                if (bytes.isEmpty() || !error.isEmpty()) {
+                    QMessageBox::warning(this,
+                                         trKey(QStringLiteral("add_failed")),
+                                         error.isEmpty() ? trKey(QStringLiteral("postman_download_failed")) : error);
+                    if (catalogMode_) {
+                        renderCatalog();
+                    }
+                    return;
+                }
+                statusMode_ = rpcOnline ? QStringLiteral("online") : QStringLiteral("offline");
+                startAddMetainfo(bytes, torrentFileName(name));
+            },
+            Qt::QueuedConnection);
+    });
+    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+    thread->start();
 }
 
 } // namespace i2p

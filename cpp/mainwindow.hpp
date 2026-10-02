@@ -2,6 +2,7 @@
 
 #include "config.hpp"
 #include "models.hpp"
+#include "postman_catalog.hpp"
 
 #include <QTimer>
 #include <QWidget>
@@ -11,6 +12,8 @@ class QPushButton;
 class QLabel;
 class QToolButton;
 class QLineEdit;
+class QComboBox;
+class QStackedWidget;
 class QVBoxLayout;
 
 namespace i2p {
@@ -34,6 +37,7 @@ private slots:
     void dispatchFilterAll();
     void dispatchFilterDownloading();
     void dispatchFilterSeeding();
+    void dispatchPostman();
     void pollWorker();
     void onTorrentsReady(QVector<Torrent> torrents, QString error);
     void onAddedReady(std::optional<QString> savedPath, QString error, bool magnet = false);
@@ -44,6 +48,16 @@ private:
     void applyChrome();
     void setStatus();
     void setFilter(const QString &name);
+    void showCatalog();
+    void buildCatalogPage();
+    void fillCatalogCombos();
+    void spawnCatalog();
+    void renderCatalog();
+    QWidget *makeCatalogCard(const PostmanTorrent &item);
+    void onCatalogReady(PostmanPage page, QString error);
+    void addCatalogItem(const PostmanTorrent &item);
+    void showAddingNotice(const QString &name);
+    void startAddCatalogFile(qint64 id, const QString &name, bool rpcOnline);
     void renderCards();
     QWidget *makeCard(const Torrent &torrent);
     void spawnRefresh();
@@ -74,22 +88,43 @@ private:
     QString searchCache_;
     QString statusMode_ = QStringLiteral("connecting");
     QString statusDetail_;
+    bool catalogMode_ = false;
+    bool catalogBusy_ = false;
+    bool catalogLoaded_ = false;
+    qint64 pendingCatalogId_ = 0;
+    QString pendingCatalogName_;
+    PostmanCatalog catalog_;
+    PostmanQuery catalogQuery_;
+    PostmanPage catalogPageData_;
+    QString catalogError_;
 
     QWidget *sidebar_ = nullptr;
     QWidget *surface_ = nullptr;
+    QStackedWidget *stack_ = nullptr;
     QWidget *scrollHost_ = nullptr;
     QLabel *statusLabel_ = nullptr;
     QLabel *summaryLabel_ = nullptr;
     QLabel *subtitleLabel_ = nullptr;
     QLabel *sectionLabel_ = nullptr;
+    QLabel *trackerSectionLabel_ = nullptr;
     QPushButton *addButton_ = nullptr;
     QPushButton *createButton_ = nullptr;
     QPushButton *settingsButton_ = nullptr;
     QPushButton *aboutButton_ = nullptr;
     QToolButton *refreshButton_ = nullptr;
     QLineEdit *searchEdit_ = nullptr;
+    QPushButton *postmanButton_ = nullptr;
     QPushButton *filterButtons_[3] = {};
     quintptr scrollPtr_ = 0;
+    QLineEdit *catalogSearch_ = nullptr;
+    QComboBox *catalogCategory_ = nullptr;
+    QComboBox *catalogOrder_ = nullptr;
+    QToolButton *catalogRefresh_ = nullptr;
+    QLabel *catalogStatusLabel_ = nullptr;
+    QLabel *catalogPageLabel_ = nullptr;
+    QPushButton *catalogPrevButton_ = nullptr;
+    QPushButton *catalogNextButton_ = nullptr;
+    quintptr catalogScrollPtr_ = 0;
 
     QTimer refreshTimer_;
     QTimer pollTimer_;

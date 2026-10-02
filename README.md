@@ -27,6 +27,12 @@
   <em>Settings · Example tunnels.conf</em>
 </p>
 
+<p align="center">
+  <img src="screenshots/screenshot4.png" alt="I2P Torrents — Postman catalog" width="720" />
+  <br>
+  <em>Postman catalog</em>
+</p>
+
 ---
 
 ## English
@@ -206,7 +212,9 @@ Push a version tag matching `VERSION`, or run **Actions → Release → Run work
 - copy info hash and open the download folder;
 - add `.torrent` files or **magnet** links; **create** `.torrent` from a file or folder; **start/stop** a torrent; remove with or without data;
 - search, filters, language (English / Русский), theme;
-- automatic refresh and connection diagnostics.
+- automatic refresh and connection diagnostics;
+- **Postman** catalog for [tracker2.postman.i2p](http://tracker2.postman.i2p/): search, categories, sort, paging, and **Add** (magnet, or a `.torrent` if the daemon rejects magnets);
+- catalog proxy in Settings: **HTTP** (usually port 4444) or **SOCKS5** (usually port 4447).
 
 ### i2pd RPC limits
 
@@ -386,7 +394,9 @@ ctest --test-dir build --output-on-failure
 - копирование info hash и открытие папки загрузки;
 - добавление `.torrent` или **магнит-ссылки**; **создание** `.torrent` из файла или папки; **старт/стоп** торрента; удаление с данными или без;
 - поиск, фильтры, язык, тема;
-- автообновление и диагностика соединения.
+- автообновление и диагностика соединения;
+- каталог **Postman** для [tracker2.postman.i2p](http://tracker2.postman.i2p/): поиск, категории, сортировка, страницы и **Добавить** (магнит, либо `.torrent`, если демон не принимает магниты);
+- прокси каталога в настройках: **HTTP** (обычно порт 4444) или **SOCKS5** (обычно порт 4447).
 
 ### Ограничения i2pd RPC
 

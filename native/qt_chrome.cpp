@@ -3541,6 +3541,8 @@ thread_local std::string g_settings_language;
 thread_local std::string g_settings_theme;
 thread_local std::string g_settings_view;
 thread_local int g_settings_refresh = 2;
+thread_local int g_settings_proxy_port = 4444;
+thread_local std::string g_settings_proxy_kind;
 thread_local std::string g_open_file;
 thread_local std::string g_magnet_link;
 thread_local std::string g_create_torrent_path;
@@ -4145,6 +4147,32 @@ int i2p_settings_exec(void *parent, const i2p_settings_in *in) {
     refresh->spin()->setSuffix(QStringLiteral(" ") + qstr(in->seconds_suffix));
     layout->addWidget(refresh);
 
+    auto *proxy_kind_label = new QLabel(qstr(in->proxy_kind_label), &dialog);
+    proxy_kind_label->setToolTip(qstr(in->proxy_port_tip));
+    layout->addWidget(proxy_kind_label);
+    auto *proxy_kind = settings_combo(&dialog, night, in->proxy_kind_http, "http", in->proxy_kind_socks,
+                                      "socks5", in->proxy_kind_current);
+    proxy_kind->setToolTip(qstr(in->proxy_port_tip));
+    layout->addWidget(proxy_kind->parentWidget());
+
+    auto *proxy_port_label = new QLabel(qstr(in->proxy_port_label), &dialog);
+    proxy_port_label->setToolTip(qstr(in->proxy_port_tip));
+    layout->addWidget(proxy_port_label);
+    auto *proxy_port = new SpinRowWidget(&dialog);
+    proxy_port->spin()->setRange(1, 65535);
+    proxy_port->spin()->setValue(std::clamp(in->proxy_port_value, 1, 65535));
+    proxy_port->setToolTip(qstr(in->proxy_port_tip));
+    layout->addWidget(proxy_port);
+    QObject::connect(proxy_kind, &QComboBox::currentIndexChanged, proxy_port, [proxy_kind, proxy_port](int) {
+        const bool socks = proxy_kind->currentData().toString() == QLatin1String("socks5");
+        const int port = proxy_port->spin()->value();
+        if (socks && port == 4444) {
+            proxy_port->spin()->setValue(4447);
+        } else if (!socks && port == 4447) {
+            proxy_port->spin()->setValue(4444);
+        }
+    });
+
     layout->addWidget(new QLabel(qstr(in->lang_label), &dialog));
     auto *language = settings_combo(&dialog, night, in->lang_en, "en", in->lang_ru, "ru", in->lang_current);
     layout->addWidget(language->parentWidget());
@@ -4239,6 +4267,8 @@ int i2p_settings_exec(void *parent, const i2p_settings_in *in) {
     g_settings_rpc = rpc->text().toStdString();
     g_settings_dir = dir->text().toStdString();
     g_settings_refresh = refresh->spin()->value();
+    g_settings_proxy_port = proxy_port->spin()->value();
+    g_settings_proxy_kind = combo_data_string(proxy_kind);
     g_settings_language = combo_data_string(language);
     g_settings_theme = combo_data_string(theme);
     g_settings_view = combo_data_string(view);
@@ -4248,6 +4278,8 @@ int i2p_settings_exec(void *parent, const i2p_settings_in *in) {
 const char *i2p_settings_rpc(void) { return g_settings_rpc.c_str(); }
 const char *i2p_settings_dir(void) { return g_settings_dir.c_str(); }
 int i2p_settings_refresh(void) { return g_settings_refresh; }
+int i2p_settings_proxy_port(void) { return g_settings_proxy_port; }
+const char *i2p_settings_proxy_kind(void) { return g_settings_proxy_kind.c_str(); }
 const char *i2p_settings_language(void) { return g_settings_language.c_str(); }
 const char *i2p_settings_theme(void) { return g_settings_theme.c_str(); }
 const char *i2p_settings_view(void) { return g_settings_view.c_str(); }

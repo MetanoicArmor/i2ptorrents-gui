@@ -45,6 +45,8 @@ struct SettingsResult {
     QString language;
     QString theme;
     QString torrentView;
+    QString catalogProxy = QStringLiteral("http");
+    quint16 httpProxyPort = 4444;
 };
 
 void installRoundedTooltips();

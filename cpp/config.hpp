@@ -19,6 +19,8 @@ struct AppSettings {
     QString language = QStringLiteral("en");
     QString torrentView = QStringLiteral("detailed");
     QString httpProxy = QStringLiteral("socks5://127.0.0.1:4447");
+    QString catalogProxy = QStringLiteral("http");
+    quint16 httpProxyPort = 4444;
     quint32 windowWidth = DEFAULT_WINDOW_WIDTH;
     quint32 windowHeight = DEFAULT_WINDOW_HEIGHT;
 
@@ -37,6 +39,7 @@ bool operator==(const AppSettings &lhs, const AppSettings &rhs);
 
 QString configDirectory();
 QString normalizeView(const QString &value);
+QString normalizeCatalogProxy(const QString &value);
 QString migrateProxy(const QString &value);
 
 } // namespace i2p
