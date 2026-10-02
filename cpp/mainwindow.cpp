@@ -1143,10 +1143,17 @@ void MainWindow::onTorrentsReady(QVector<Torrent> torrents, QString error)
     } else {
         statusMode_ = QStringLiteral("offline");
         statusDetail_ = error;
-        setLabelText(reinterpret_cast<quintptr>(summaryLabel_), error);
+        if (!catalogMode_) {
+            setLabelText(reinterpret_cast<quintptr>(summaryLabel_), error);
+        }
     }
-    applyChrome();
-    renderCards();
+    if (catalogMode_) {
+        // Periodic RPC refresh must not rebuild the catalog scroll area (resets scroll position).
+        setStatus();
+    } else {
+        applyChrome();
+        renderCards();
+    }
 }
 
 void MainWindow::onAddedReady(std::optional<QString> savedPath, QString error, bool magnet)
