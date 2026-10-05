@@ -37,6 +37,7 @@ const char *kCatalogHtml = R"(
 <td class='category'><a href='index.php?view=Main&category=1' title='Movies'><span class='cat Movies'>Movies</span></a></td>
 <td class='torrentname'>
 <a href='index.php?view=TorrentDetail&id=104486' title='Tom &amp; Jerry'>Tom &amp; Jerry</a>
+<span>Classic cartoon shorts. <a href='https://www.imdb.com/title/tt0000001'>IMDb</a></span>
 </td>
 <td class='filesize'><span class='size'>1.1G <span class='filecount'>1</span></span></td>
 <td class='swarmsize'><span class='swarm'>2 / 0<span class='badge'> 0</span></span></td>
@@ -91,11 +92,13 @@ void PostmanCatalogTests::parsesCatalogRows()
     QCOMPARE(first.id, qint64(104486));
     QCOMPARE(first.magnet,
              QStringLiteral("magnet:?xt=urn:btih:d8d00c98e3a08929e9a0276ae43453cb2a391b4b&dn=Tom+%26+Jerry&tr=http://tracker2.postman.i2p/announce.php"));
+    QCOMPARE(first.summary, QStringLiteral("Classic cartoon shorts. IMDb"));
 
     QCOMPARE(page.rows.at(1).id, qint64(7));
     QCOMPARE(page.rows.at(1).seeders, 1);
     QCOMPARE(page.rows.at(1).leechers, 3);
     QCOMPARE(page.rows.at(1).category, QStringLiteral("Music"));
+    QVERIFY(page.rows.at(1).summary.isEmpty());
 }
 
 int runPostmanCatalogTests(int argc, char *argv[])

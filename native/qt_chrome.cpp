@@ -3469,9 +3469,17 @@ protected:
                         }
                     }
                 }
-                const QString tip = widget->toolTip().trimmed();
+                QWidget *tip_widget = widget;
+                QString tip;
+                while (tip_widget != nullptr) {
+                    tip = tip_widget->toolTip().trimmed();
+                    if (!tip.isEmpty()) {
+                        break;
+                    }
+                    tip_widget = tip_widget->parentWidget();
+                }
                 if (!tip.isEmpty()) {
-                    ensure_tip()->present(help->globalPos(), tip, -1, widget);
+                    ensure_tip()->present(help->globalPos(), tip, -1, tip_widget);
                     return true;
                 }
                 ensure_tip()->forceHide();

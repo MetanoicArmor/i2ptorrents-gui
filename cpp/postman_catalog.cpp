@@ -381,6 +381,24 @@ PostmanPage parsePostmanPage(const QString &html, const PostmanQuery &query)
         if (item.name.isEmpty()) {
             item.name = plainText(nameCell);
         }
+        QString blurbs;
+        const QRegularExpression spanRe(QStringLiteral("<span\\b[^>]*>(.*?)</span>"),
+                                         QRegularExpression::CaseInsensitiveOption |
+                                             QRegularExpression::DotMatchesEverythingOption);
+        auto spans = spanRe.globalMatch(nameCell);
+        while (spans.hasNext()) {
+            blurbs += spans.next().captured(1);
+            blurbs += QLatin1Char(' ');
+        }
+        item.summary = plainText(blurbs);
+        if (item.summary == item.name) {
+            item.summary.clear();
+        }
+        constexpr int kSummaryLimit = 500;
+        if (item.summary.size() > kSummaryLimit) {
+            item.summary.truncate(kSummaryLimit);
+            item.summary += QStringLiteral("…");
+        }
         const QString categoryCell = tableCell(row, QStringLiteral("category"));
         item.category = attrValue(categoryCell, QStringLiteral("\\btitle\\s*=\\s*\"([^\"]*)\""));
         if (item.category.isEmpty()) {

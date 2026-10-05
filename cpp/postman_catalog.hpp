@@ -29,6 +29,7 @@ struct PostmanTorrent {
     int leechers = -1;
     QString added;
     QString magnet;
+    QString summary;
 };
 
 struct PostmanPage {

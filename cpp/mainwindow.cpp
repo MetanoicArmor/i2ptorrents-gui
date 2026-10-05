@@ -1435,6 +1435,10 @@ QWidget *MainWindow::makeCatalogCard(const PostmanTorrent &item)
     name->setObjectName(QStringLiteral("TorrentName"));
     name->setWordWrap(true);
     root->addWidget(name);
+    if (!item.summary.isEmpty()) {
+        cardWidget->setToolTip(item.summary);
+        name->setToolTip(item.summary);
+    }
 
     QStringList meta;
     if (!item.category.isEmpty()) {
@@ -1454,6 +1458,9 @@ QWidget *MainWindow::makeCatalogCard(const PostmanTorrent &item)
     auto *details = new QLabel(meta.join(QStringLiteral("  ·  ")), cardWidget);
     details->setObjectName(QStringLiteral("Secondary"));
     details->setWordWrap(true);
+    if (!item.summary.isEmpty()) {
+        details->setToolTip(item.summary);
+    }
     root->addWidget(details);
 
     auto *actions = new QWidget(cardWidget);
