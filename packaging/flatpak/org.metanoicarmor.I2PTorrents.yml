@@ -1,0 +1,37 @@
+# Template — update url/sha256 after each GitHub Release.
+app-id: org.metanoicarmor.I2PTorrents
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+command: i2ptorrents
+
+finish-args:
+  - --share=network
+  - --share=ipc
+  - --socket=fallback-x11
+  - --socket=wayland
+  - --device=dri
+  - --filesystem=home
+  - --filesystem=xdg-download
+
+modules:
+  - name: i2ptorrents
+    buildsystem: simple
+    build-commands:
+      - install -Dm755 I2PTorrents.AppImage /app/bin/I2PTorrents.AppImage
+      - install -Dm755 i2ptorrents-entry.sh /app/bin/i2ptorrents
+      - install -Dm644 i2ptorrents.desktop /app/share/applications/org.metanoicarmor.I2PTorrents.desktop
+      - install -Dm644 icon.png /app/share/icons/hicolor/512x512/apps/org.metanoicarmor.I2PTorrents.png
+    sources:
+      - type: file
+        url: https://github.com/MetanoicArmor/i2ptorrents-gui/releases/download/v0.2.7/I2PTorrents-linux-x86_64-v0.2.7.AppImage
+        sha256: REPLACE_AFTER_RELEASE
+        dest-filename: I2PTorrents.AppImage
+      - type: file
+        path: i2ptorrents-entry.sh
+      - type: file
+        path: i2ptorrents.desktop
+      - type: file
+        url: https://github.com/MetanoicArmor/i2ptorrents-gui/raw/v0.2.7/icon.png
+        sha256: REPLACE_AFTER_RELEASE
+        dest-filename: icon.png

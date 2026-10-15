@@ -1,0 +1,22 @@
+pkgbase = i2ptorrents-bin
+	pkgdesc = Desktop GUI for the i2pd torrent client (official AppImage, binary)
+	pkgver = 0.2.7
+	pkgrel = 1
+	url = https://github.com/MetanoicArmor/i2ptorrents-gui
+	arch = x86_64
+	arch = aarch64
+	license = BSD-3-Clause
+	depends = hicolor-icon-theme
+	depends = zlib
+	depends = fuse2
+	options = !strip
+	source_x86_64 = I2PTorrents-linux-x86_64-v0.2.7.AppImage::https://github.com/MetanoicArmor/i2ptorrents-gui/releases/download/v0.2.7/I2PTorrents-linux-x86_64-v0.2.7.AppImage
+	source_x86_64 = icon.png::https://github.com/MetanoicArmor/i2ptorrents-gui/raw/v0.2.7/icon.png
+	sha256sums_x86_64 = REPLACE_AFTER_RELEASE
+	sha256sums_x86_64 = REPLACE_AFTER_RELEASE
+	source_aarch64 = I2PTorrents-linux-aarch64-v0.2.7.AppImage::https://github.com/MetanoicArmor/i2ptorrents-gui/releases/download/v0.2.7/I2PTorrents-linux-aarch64-v0.2.7.AppImage
+	source_aarch64 = icon.png::https://github.com/MetanoicArmor/i2ptorrents-gui/raw/v0.2.7/icon.png
+	sha256sums_aarch64 = REPLACE_AFTER_RELEASE
+	sha256sums_aarch64 = REPLACE_AFTER_RELEASE
+
+pkgname = i2ptorrents-bin

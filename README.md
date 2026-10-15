@@ -49,6 +49,20 @@
 
 A desktop client for i2pd’s torrent tunnel, built with **C++17** and **Qt 6 Widgets**. The UI follows the look of [I2PChat-ng](https://github.com/MetanoicArmor/I2PChat-ng): light and night themes, cards, a compact sidebar, and native behaviour on Linux, Windows, and macOS.
 
+### Downloads & package managers
+
+Binaries: [**Releases**](https://github.com/MetanoicArmor/i2ptorrents-gui/releases/latest) (Windows zip, Linux AppImage/`.deb`/`.rpm`, macOS `.app` zip). Packaging templates: [`packaging/`](packaging/).
+
+| Platform | Install |
+| --- | --- |
+| **macOS** (Homebrew) | `brew install --cask metanoicarmor/i2ptorrents/i2ptorrents` |
+| **Windows** (winget) | `winget install MetanoicArmor.I2PTorrents` *(after the winget-pkgs PR merges)* |
+| **Arch** (AUR) | `yay -S i2ptorrents-bin` *(after the AUR package is published)* |
+| **Linux** (Flatpak) | Template in [`packaging/flatpak/`](packaging/flatpak/) for Flathub |
+| **Debian/Fedora** | `.deb` / `.rpm` attached to each release |
+
+Needs a running **i2pd** with a `type=torrents` tunnel (see below).
+
 ### Requirements
 
 - **i2pd** with torrent RPC (openssl branch / build newer than 2.61.0; Boost ≥ 1.81)
@@ -244,6 +258,20 @@ Current i2pd exposes `torrent-add`, `torrent-get`, `torrent-remove`, `torrent-st
 <p align="right"><a href="#en">← English</a></p>
 
 Кроссплатформенный настольный клиент для встроенного torrent-клиента i2pd на **C++17** и **Qt 6 Widgets**. Интерфейс в стиле [I2PChat-ng](https://github.com/MetanoicArmor/I2PChat-ng): светлая и ночная темы, карточки, компактная боковая панель.
+
+### Загрузки и пакетные менеджеры
+
+Сборки: [**Releases**](https://github.com/MetanoicArmor/i2ptorrents-gui/releases/latest) (Windows zip, Linux AppImage/`.deb`/`.rpm`, macOS `.app` zip). Шаблоны: [`packaging/`](packaging/).
+
+| Платформа | Установка |
+| --- | --- |
+| **macOS** (Homebrew) | `brew install --cask metanoicarmor/i2ptorrents/i2ptorrents` |
+| **Windows** (winget) | `winget install MetanoicArmor.I2PTorrents` *(после merge PR в winget-pkgs)* |
+| **Arch** (AUR) | `yay -S i2ptorrents-bin` *(после публикации пакета в AUR)* |
+| **Linux** (Flatpak) | Шаблон в [`packaging/flatpak/`](packaging/flatpak/) для Flathub |
+| **Debian/Fedora** | `.deb` / `.rpm` на каждом релизе |
+
+Нужен запущенный **i2pd** с туннелем `type=torrents` (см. ниже).
 
 ### Требования
 

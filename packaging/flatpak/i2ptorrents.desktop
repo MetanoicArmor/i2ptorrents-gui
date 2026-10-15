@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=I2P Torrents
+Comment=Desktop GUI for the i2pd torrent client
+Exec=i2ptorrents %u
+Icon=org.metanoicarmor.I2PTorrents
+Terminal=false
+Categories=Network;FileTransfer;
+StartupWMClass=I2PTorrents

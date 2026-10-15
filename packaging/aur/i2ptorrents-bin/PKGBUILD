@@ -1,0 +1,48 @@
+# Maintainer: submit as i2ptorrents-bin on AUR (see packaging/aur/README.md)
+# Checksums: ./packaging/refresh-checksums.sh vX.Y.Z
+pkgname=i2ptorrents-bin
+pkgver=0.2.7
+pkgrel=1
+pkgdesc="Desktop GUI for the i2pd torrent client (official AppImage, binary)"
+arch=('x86_64' 'aarch64')
+url="https://github.com/MetanoicArmor/i2ptorrents-gui"
+license=('BSD-3-Clause')
+depends=('hicolor-icon-theme' 'zlib' 'fuse2')
+options=('!strip')
+_icon="icon.png::${url}/raw/v${pkgver}/icon.png"
+source_x86_64=("I2PTorrents-linux-x86_64-v${pkgver}.AppImage::${url}/releases/download/v${pkgver}/I2PTorrents-linux-x86_64-v${pkgver}.AppImage"
+               "${_icon}")
+source_aarch64=("I2PTorrents-linux-aarch64-v${pkgver}.AppImage::${url}/releases/download/v${pkgver}/I2PTorrents-linux-aarch64-v${pkgver}.AppImage"
+                "${_icon}")
+sha256sums_x86_64=('REPLACE_AFTER_RELEASE'
+                   'REPLACE_AFTER_RELEASE')
+sha256sums_aarch64=('REPLACE_AFTER_RELEASE'
+                    'REPLACE_AFTER_RELEASE')
+
+package() {
+  cd "$srcdir"
+  case "${CARCH}" in
+    x86_64)  _app="I2PTorrents-linux-x86_64-v${pkgver}.AppImage" ;;
+    aarch64) _app="I2PTorrents-linux-aarch64-v${pkgver}.AppImage" ;;
+    *)
+      echo "ERROR: unsupported CARCH=${CARCH}" >&2
+      exit 1
+      ;;
+  esac
+  install -dm755 "$pkgdir/opt/i2ptorrents"
+  install -Dm755 "$_app" "$pkgdir/opt/i2ptorrents/I2PTorrents.AppImage"
+  install -Dm644 icon.png "$pkgdir/usr/share/pixmaps/i2ptorrents.png"
+  install -Dm644 /dev/stdin "$pkgdir/usr/share/applications/i2ptorrents.desktop" <<'EOF'
+[Desktop Entry]
+Type=Application
+Name=I2P Torrents
+Comment=Desktop GUI for the i2pd torrent client
+Exec=/usr/bin/i2ptorrents %u
+Icon=i2ptorrents
+Terminal=false
+Categories=Network;FileTransfer;
+StartupWMClass=I2PTorrents
+EOF
+  install -dm755 "$pkgdir/usr/bin"
+  ln -sf /opt/i2ptorrents/I2PTorrents.AppImage "$pkgdir/usr/bin/i2ptorrents"
+}
