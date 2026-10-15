@@ -28,6 +28,8 @@ private slots:
     void normalizeMagnetLinkAcceptsHexAndBase32();
     void setFilePrioritySendsTorrentSet();
     void startStopTorrentSendsIds();
+    void basicAuthorizationHeaderEncodesUserAndPassword();
+    void rpcListenEndpointStripsRpcSuffix();
 };
 
 void RpcTests::normalizeRpcUrlCompletesPath()
@@ -496,6 +498,25 @@ void RpcTests::startStopTorrentSendsIds()
     QVERIFY(client.stopTorrent(4, &error));
     QCOMPARE(method, QStringLiteral("torrent-stop"));
     QCOMPARE(arguments.value(QStringLiteral("ids")).toArray().first().toInt(), 4);
+}
+
+void RpcTests::basicAuthorizationHeaderEncodesUserAndPassword()
+{
+    QCOMPARE(i2p::basicAuthorizationHeader(QString(), QString()), QByteArray("Basic Og=="));
+    QCOMPARE(i2p::basicAuthorizationHeader(QStringLiteral("alice"), QStringLiteral("secret")),
+             QByteArray("Basic YWxpY2U6c2VjcmV0"));
+}
+
+void RpcTests::rpcListenEndpointStripsRpcSuffix()
+{
+    const auto endpoint = i2p::rpcListenEndpoint(QStringLiteral("http://127.0.0.1:9292/customrpc"));
+    QVERIFY(endpoint.has_value());
+    QCOMPARE(endpoint->port, quint16(9292));
+    QCOMPARE(endpoint->path, QStringLiteral("customrpc"));
+    const auto withSuffix = i2p::rpcListenEndpoint(QStringLiteral("http://127.0.0.1:9191/mytorrents/rpc/"));
+    QVERIFY(withSuffix.has_value());
+    QCOMPARE(withSuffix->port, quint16(9191));
+    QCOMPARE(withSuffix->path, QStringLiteral("mytorrents"));
 }
 
 int runRpcTests(int argc, char *argv[])

@@ -10,6 +10,8 @@
 #endif
 
 #include "torrent_create.hpp"
+#include "i2pd_tunnels.hpp"
+#include "rpc.hpp"
 
 #include <QAbstractItemView>
 #include <QAbstractAnimation>
@@ -1375,11 +1377,11 @@ private:
             return;
         }
         const int width = bar_->width();
-        bar_->setGeometry(this->width() - width - kEdgeMargin, 8, width, std::max(16, height() - 16));
+        bar_->setGeometry(this->width() - width - kEdgeMargin, 4, width, std::max(16, height() - 8));
         bar_->raise();
     }
 
-    static constexpr int kEdgeMargin = 3;
+    static constexpr int kEdgeMargin = 2;
     RoundedVerticalScrollbar *bar_ = nullptr;
     QPointer<QScrollBar> scroll_hooks_;
 };
@@ -3551,6 +3553,11 @@ thread_local std::string g_settings_view;
 thread_local int g_settings_refresh = 2;
 thread_local int g_settings_proxy_port = 4444;
 thread_local std::string g_settings_proxy_kind;
+thread_local int g_settings_rpc_auth = 0;
+thread_local std::string g_settings_rpc_user;
+thread_local std::string g_settings_rpc_pass;
+thread_local std::string g_settings_i2pd_dir;
+thread_local std::string g_settings_tunnels_conf;
 thread_local std::string g_open_file;
 thread_local std::string g_magnet_link;
 thread_local std::string g_create_torrent_path;
@@ -4066,9 +4073,79 @@ int i2p_settings_exec(void *parent, const i2p_settings_in *in) {
     const int inner_w = DialogMetrics::inner_w(DialogMetrics::kSettingsW, margins);
     const bool night = stylesheet_is_night(dialog.styleSheet());
 
-    auto *layout = new QVBoxLayout(&dialog);
-    layout->setContentsMargins(margins);
+    auto *outer = new QVBoxLayout(&dialog);
+    outer->setContentsMargins(margins.left(), margins.top(), 0, margins.bottom());
+    outer->setSpacing(10);
+    auto *form_scroll = new OverlayScrollArea(&dialog);
+    form_scroll->viewport()->setAutoFillBackground(false);
+    auto *form = new QWidget;
+    form->setAutoFillBackground(false);
+    auto *layout = new QVBoxLayout(form);
+    layout->setContentsMargins(0, 0, margins.right(), 0);
     layout->setSpacing(10);
+    form_scroll->setWidget(form);
+    form_scroll->applyTheme(night ? QStringLiteral("night") : QStringLiteral("light"));
+    outer->addWidget(form_scroll, 1);
+    QString section_name = qstr(in->tunnels_section);
+
+    auto make_path_edit = [&dialog](const QString &value, const QString &tip) {
+        auto *edit = new QLineEdit(value, &dialog);
+        edit->setToolTip(tip);
+        edit->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
+        edit->setTextMargins(4, 0, 4, 0);
+        edit->setFrame(false);
+        edit->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
+#ifdef Q_OS_MAC
+        edit->setAttribute(Qt::WA_MacNormalSize, true);
+        edit->setAttribute(Qt::WA_LayoutUsesWidgetRect, true);
+#endif
+        return edit;
+    };
+    auto make_path_row = [&dialog](QLineEdit *edit, QPushButton *button) {
+        auto *row = new QWidget(&dialog);
+        row->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        row->setFixedHeight(DialogMetrics::kControlMinH);
+#ifdef Q_OS_MAC
+        row->setAttribute(Qt::WA_LayoutUsesWidgetRect, true);
+#endif
+        auto *row_layout = new QHBoxLayout(row);
+        row_layout->setContentsMargins(0, 0, 0, 0);
+        row_layout->setSpacing(8);
+        auto *frame = new QFrame(row);
+        frame->setObjectName(QStringLiteral("PathRow"));
+        frame->setFrameShape(QFrame::NoFrame);
+        lock_dialog_control(frame);
+        frame->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        auto *frame_layout = new QHBoxLayout(frame);
+        frame_layout->setContentsMargins(0, 0, 0, 0);
+        frame_layout->setSpacing(0);
+        edit->setParent(frame);
+        frame_layout->addWidget(edit, 1);
+        row_layout->addWidget(frame, 1, Qt::AlignTop);
+        if (button != nullptr) {
+            button->setParent(row);
+            lock_dialog_control(button);
+            button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+            row_layout->addWidget(button, 0, Qt::AlignTop);
+        }
+        return row;
+    };
+
+    auto *i2pd_dir_label = new QLabel(qstr(in->i2pd_dir_label), &dialog);
+    i2pd_dir_label->setToolTip(qstr(in->i2pd_dir_tip));
+    layout->addWidget(i2pd_dir_label);
+    auto *i2pd_dir = make_path_edit(qstr(in->i2pd_dir_value), qstr(in->i2pd_dir_tip));
+    auto *i2pd_browse = new QPushButton(qstr(in->browse), &dialog);
+    i2pd_browse->setToolTip(qstr(in->i2pd_dir_tip));
+    layout->addWidget(make_path_row(i2pd_dir, i2pd_browse));
+
+    auto *tunnels_conf_label = new QLabel(qstr(in->tunnels_conf_label), &dialog);
+    tunnels_conf_label->setToolTip(qstr(in->tunnels_conf_tip));
+    layout->addWidget(tunnels_conf_label);
+    auto *tunnels_conf = make_path_edit(qstr(in->tunnels_conf_value), qstr(in->tunnels_conf_tip));
+    auto *tunnels_browse = new QPushButton(qstr(in->browse), &dialog);
+    tunnels_browse->setToolTip(qstr(in->tunnels_conf_tip));
+    layout->addWidget(make_path_row(tunnels_conf, tunnels_browse));
 
     auto *rpc_label = new QLabel(qstr(in->rpc_label), &dialog);
     rpc_label->setToolTip(qstr(in->rpc_tip));
@@ -4082,9 +4159,6 @@ int i2p_settings_exec(void *parent, const i2p_settings_in *in) {
     rpc_layout->setContentsMargins(0, 0, 0, 0);
     rpc_layout->setSpacing(0);
     auto *rpc = new QLineEdit(qstr(in->rpc_value), rpc_row);
-    rpc->setObjectName(QStringLiteral("ReadOnlyPath"));
-    rpc->setReadOnly(true);
-    rpc->setFocusPolicy(Qt::NoFocus);
     rpc->setPlaceholderText(qstr(in->rpc_placeholder));
     rpc->setToolTip(qstr(in->rpc_tip));
     rpc->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
@@ -4097,6 +4171,28 @@ int i2p_settings_exec(void *parent, const i2p_settings_in *in) {
 #endif
     rpc_layout->addWidget(rpc, 1);
     layout->addWidget(rpc_row);
+
+    auto *rpc_auth = new QCheckBox(qstr(in->rpc_auth_label), &dialog);
+    rpc_auth->setChecked(in->rpc_auth_value != 0);
+    rpc_auth->setToolTip(qstr(in->rpc_auth_tip));
+    layout->addWidget(rpc_auth);
+
+    auto *rpc_user_label = new QLabel(qstr(in->rpc_user_label), &dialog);
+    rpc_user_label->setToolTip(qstr(in->rpc_auth_tip));
+    layout->addWidget(rpc_user_label);
+    auto *rpc_user = new QLineEdit(qstr(in->rpc_user_value), &dialog);
+    polish_line_edit(rpc_user);
+    rpc_user->setToolTip(qstr(in->rpc_auth_tip));
+    layout->addWidget(rpc_user);
+
+    auto *rpc_pass_label = new QLabel(qstr(in->rpc_pass_label), &dialog);
+    rpc_pass_label->setToolTip(qstr(in->rpc_auth_tip));
+    layout->addWidget(rpc_pass_label);
+    auto *rpc_pass = new QLineEdit(qstr(in->rpc_pass_value), &dialog);
+    rpc_pass->setEchoMode(QLineEdit::Password);
+    polish_line_edit(rpc_pass);
+    rpc_pass->setToolTip(qstr(in->rpc_auth_tip));
+    layout->addWidget(rpc_pass);
 
     auto *dir_label = new QLabel(qstr(in->dir_label), &dialog);
     dir_label->setToolTip(qstr(in->dir_tip));
@@ -4119,9 +4215,6 @@ int i2p_settings_exec(void *parent, const i2p_settings_in *in) {
     path_layout->setContentsMargins(0, 0, 0, 0);
     path_layout->setSpacing(0);
     auto *dir = new QLineEdit(qstr(in->dir_value), path_row);
-    dir->setObjectName(QStringLiteral("ReadOnlyPath"));
-    dir->setReadOnly(true);
-    dir->setFocusPolicy(Qt::NoFocus);
     dir->setToolTip(qstr(in->dir_tip));
     dir->setAlignment(Qt::AlignLeft | Qt::AlignVCenter);
     dir->setTextMargins(4, 0, 4, 0);
@@ -4138,13 +4231,73 @@ int i2p_settings_exec(void *parent, const i2p_settings_in *in) {
     browse->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     browse->setToolTip(qstr(in->dir_tip));
     QObject::connect(browse, &QPushButton::clicked, &dialog, [dir, &dialog, in] {
-        const QString path = dir->text().trimmed();
-        if (path.isEmpty() || !QFileInfo(path).exists()) {
-            QMessageBox::information(&dialog, qstr(in->dir_label), qstr(in->open_dir_missing));
-            return;
+        const QString start = dir->text().trimmed();
+        const QString picked = QFileDialog::getExistingDirectory(
+            &dialog, qstr(in->dir_label), start.isEmpty() ? QDir::homePath() : start);
+        if (!picked.isEmpty()) {
+            dir->setText(picked);
         }
-        QDesktopServices::openUrl(QUrl::fromLocalFile(path));
     });
+    struct TunnelFields {
+        QString rpc;
+        QString dir;
+        bool auth = false;
+        QString user;
+        QString pass;
+        QString conf;
+        bool operator==(const TunnelFields &other) const {
+            return rpc == other.rpc && dir == other.dir && auth == other.auth && user == other.user
+                && pass == other.pass && conf == other.conf;
+        }
+    };
+    auto read_tunnel_fields = [rpc, dir, rpc_auth, rpc_user, rpc_pass, tunnels_conf] {
+        return TunnelFields{rpc->text().trimmed(),       dir->text().trimmed(),      rpc_auth->isChecked(),
+                            rpc_user->text().trimmed(),  rpc_pass->text().trimmed(), tunnels_conf->text().trimmed()};
+    };
+    TunnelFields loaded_tunnel = read_tunnel_fields();
+    auto apply_tunnel = [rpc, dir, rpc_auth, rpc_user, rpc_pass, &section_name](const i2p::TorrentsTunnelConfig &config) {
+        rpc->setText(config.rpcUrl());
+        if (!config.torrentsDir.isEmpty()) {
+            dir->setText(config.torrentsDir);
+        }
+        rpc_auth->setChecked(config.rpcAuth);
+        rpc_user->setText(config.rpcUser);
+        rpc_pass->setText(config.rpcPass);
+        section_name = config.sectionName;
+    };
+    QObject::connect(i2pd_browse, &QPushButton::clicked, &dialog,
+                     [i2pd_dir, tunnels_conf, &dialog, in, apply_tunnel] {
+                         const QString start = i2pd_dir->text().trimmed();
+                         const QString picked = QFileDialog::getExistingDirectory(
+                             &dialog, qstr(in->i2pd_dir_label), start.isEmpty() ? QDir::homePath() : start);
+                         if (picked.isEmpty()) {
+                             return;
+                         }
+                         i2pd_dir->setText(picked);
+                         if (const auto config = i2p::detectTorrentsTunnel(picked, QString())) {
+                             apply_tunnel(*config);
+                             tunnels_conf->setText(config->confPath);
+                         }
+                     });
+    QObject::connect(tunnels_browse, &QPushButton::clicked, &dialog,
+                     [tunnels_conf, &dialog, in, apply_tunnel, &section_name] {
+                         const QString start = tunnels_conf->text().trimmed();
+                         const QString dir = QFileInfo(start).absolutePath();
+                         const QString picked = QFileDialog::getOpenFileName(
+                             &dialog,
+                             qstr(in->tunnels_conf_label),
+                             dir.isEmpty() || dir == QStringLiteral(".") ? QDir::homePath() : dir,
+                             qstr(in->conf_filter));
+                         if (picked.isEmpty()) {
+                             return;
+                         }
+                         tunnels_conf->setText(picked);
+                         if (const auto config = i2p::parseTorrentsTunnelFile(picked)) {
+                             apply_tunnel(*config);
+                         } else {
+                             section_name.clear();
+                         }
+                     });
     dir_layout->addWidget(browse, 0, Qt::AlignTop);
     layout->addWidget(dir_row);
 
@@ -4251,15 +4404,62 @@ int i2p_settings_exec(void *parent, const i2p_settings_in *in) {
                               });
     });
     layout->addWidget(example, 0, Qt::AlignLeft);
-    layout->addStretch(1);
 
     auto *cancel = new QPushButton(qstr(in->cancel), &dialog);
     auto *save = new QPushButton(qstr(in->save), &dialog);
     save->setObjectName(QStringLiteral("Primary"));
     save->setDefault(true);
     QObject::connect(cancel, &QPushButton::clicked, &dialog, &QDialog::reject);
-    QObject::connect(save, &QPushButton::clicked, &dialog, &QDialog::accept);
-    add_dialog_buttons(layout, {cancel, save});
+    QObject::connect(save, &QPushButton::clicked, &dialog,
+                     [&dialog, in, rpc, rpc_auth, rpc_user, rpc_pass, dir, tunnels_conf, &section_name,
+                      read_tunnel_fields, &loaded_tunnel] {
+        if (read_tunnel_fields() == loaded_tunnel) {
+            dialog.accept();
+            return;
+        }
+        const QString confPath = tunnels_conf->text().trimmed();
+        QString endpointError;
+        const auto endpoint = i2p::rpcListenEndpoint(rpc->text(), &endpointError);
+        if (!endpoint.has_value()) {
+            QMessageBox::warning(&dialog, qstr(in->title), endpointError);
+            return;
+        }
+        if (dir->text().trimmed().isEmpty()) {
+            QMessageBox::warning(&dialog, qstr(in->dir_label), qstr(in->open_dir_missing));
+            return;
+        }
+        i2p::TorrentsTunnelConfig values;
+        values.rpcAuth = rpc_auth->isChecked();
+        values.rpcUser = rpc_user->text().trimmed();
+        values.rpcPass = rpc_pass->text().trimmed();
+        values.rpcPort = endpoint->port;
+        values.rpcPath = endpoint->path;
+        values.torrentsDir = dir->text().trimmed();
+        const bool createSection = section_name.trimmed().isEmpty();
+        const QString section = createSection ? QStringLiteral("MyTorrents") : section_name.trimmed();
+        QString writeError;
+        if (!i2p::writeTorrentsSection(confPath, section, values, createSection, &writeError)) {
+            QString message = qstr(in->tunnels_write_failed);
+            if (writeError == QLatin1String("missing")) {
+                message = qstr(in->tunnels_missing);
+            } else if (writeError == QLatin1String("invalid")) {
+                message = qstr(in->rpc_auth_invalid);
+            } else if (writeError == QLatin1String("readonly")) {
+                message = qstr(in->tunnels_readonly).replace(QStringLiteral("{path}"), confPath);
+            } else {
+                message.replace(QStringLiteral("{error}"), writeError);
+            }
+            QMessageBox::warning(&dialog, qstr(in->title), message);
+            return;
+        }
+        dialog.accept();
+    });
+    add_dialog_buttons(outer, {cancel, save});
+    if (QLayoutItem *item = outer->itemAt(outer->count() - 1)) {
+        if (QLayout *buttons = item->layout()) {
+            buttons->setContentsMargins(0, DialogMetrics::kButtonRowTop, margins.right(), 0);
+        }
+    }
 
     exec_app_modal_dialog(&dialog, host, inner_w, QSize(DialogMetrics::kSettingsW, 0), [&] {
         lock_wrapped_label(note, inner_w);
@@ -4268,6 +4468,18 @@ int i2p_settings_exec(void *parent, const i2p_settings_in *in) {
         lock_dialog_control(path_row);
         lock_dialog_control(browse);
         lock_dialog_control(example);
+        form->setMinimumWidth(inner_w);
+        layout->activate();
+        form->adjustSize();
+        const int form_h = std::max({form->sizeHint().height(), form->minimumSizeHint().height(),
+                                     layout->minimumSize().height()});
+        int max_h = 640;
+        if (QScreen *screen = dialog.screen() != nullptr ? dialog.screen() : QGuiApplication::primaryScreen()) {
+            max_h = std::max(320, screen->availableGeometry().height() - 80);
+        }
+        const int chrome = margins.top() + margins.bottom() + outer->spacing() + DialogMetrics::kControlMinH
+                           + DialogMetrics::kButtonRowTop;
+        form_scroll->setMinimumHeight(std::min(form_h, std::max(240, max_h - chrome)));
     });
     if (dialog.result() != QDialog::Accepted) {
         return 0;
@@ -4280,6 +4492,11 @@ int i2p_settings_exec(void *parent, const i2p_settings_in *in) {
     g_settings_language = combo_data_string(language);
     g_settings_theme = combo_data_string(theme);
     g_settings_view = combo_data_string(view);
+    g_settings_rpc_auth = rpc_auth->isChecked() ? 1 : 0;
+    g_settings_rpc_user = rpc_user->text().trimmed().toStdString();
+    g_settings_rpc_pass = rpc_pass->text().trimmed().toStdString();
+    g_settings_i2pd_dir = i2pd_dir->text().trimmed().toStdString();
+    g_settings_tunnels_conf = tunnels_conf->text().trimmed().toStdString();
     return 1;
 }
 
@@ -4291,6 +4508,11 @@ const char *i2p_settings_proxy_kind(void) { return g_settings_proxy_kind.c_str()
 const char *i2p_settings_language(void) { return g_settings_language.c_str(); }
 const char *i2p_settings_theme(void) { return g_settings_theme.c_str(); }
 const char *i2p_settings_view(void) { return g_settings_view.c_str(); }
+int i2p_settings_rpc_auth(void) { return g_settings_rpc_auth; }
+const char *i2p_settings_rpc_user(void) { return g_settings_rpc_user.c_str(); }
+const char *i2p_settings_rpc_pass(void) { return g_settings_rpc_pass.c_str(); }
+const char *i2p_settings_i2pd_dir(void) { return g_settings_i2pd_dir.c_str(); }
+const char *i2p_settings_tunnels_conf(void) { return g_settings_tunnels_conf.c_str(); }
 
 const char *i2p_open_file(void *parent, const char *title, const char *filter) {
     g_open_file.clear();
@@ -4356,7 +4578,7 @@ int i2p_create_torrent_exec(void *parent, const i2p_create_torrent_in *in) {
     trackers->setAcceptRichText(false);
     trackers->setFrameShape(QFrame::NoFrame);
     trackers->setPlainText(qstr(in->trackers_value));
-    trackers->setFixedHeight(72);
+    trackers->setFixedHeight(140);
     trackers->setTabChangesFocus(true);
     layout->addWidget(trackers);
 

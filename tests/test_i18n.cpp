@@ -1,4 +1,5 @@
 #include "i18n.hpp"
+#include "i2pd_tunnels.hpp"
 
 #include <QTest>
 
@@ -12,6 +13,7 @@ private slots:
     void aboutStrings();
     void translationCatalogsHaveSameKeys();
     void russianPiecesPlural();
+    void exampleBodyListsDefaultTrackers();
 };
 
 void I18nTests::defaultLanguageIsEnglish()
@@ -60,6 +62,17 @@ void I18nTests::translationCatalogsHaveSameKeys()
     const QString ruSettings = i2p::trKey(QStringLiteral("settings"));
     QVERIFY(!enSettings.isEmpty());
     QVERIFY(!ruSettings.isEmpty());
+}
+
+void I18nTests::exampleBodyListsDefaultTrackers()
+{
+    i2p::setLanguage(QStringLiteral("en"));
+    const QString body = i2p::trArgs(QStringLiteral("settings_example_body"),
+                                     {{QStringLiteral("trackers"), i2p::defaultI2pTrackersConf()}});
+    for (const QString &url : i2p::defaultI2pTrackers()) {
+        QVERIFY2(body.contains(url), qPrintable(url));
+    }
+    QVERIFY(!body.contains(QStringLiteral("{trackers}")));
 }
 
 void I18nTests::russianPiecesPlural()

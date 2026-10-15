@@ -4,6 +4,7 @@
 #include "chrome.hpp"
 #include "config.hpp"
 #include "i18n.hpp"
+#include "i2pd_tunnels.hpp"
 #include "rpc.hpp"
 #include "theme.hpp"
 
@@ -44,6 +45,15 @@ PostmanProxy catalogProxy(const AppSettings &settings)
     return proxy;
 }
 
+RpcCredentials credentialsFrom(const AppSettings &settings)
+{
+    RpcCredentials credentials;
+    credentials.enabled = settings.rpcAuth;
+    credentials.user = settings.rpcUser;
+    credentials.password = settings.rpcPass;
+    return credentials;
+}
+
 QString torrentFileName(const QString &name)
 {
     QString file = name.trimmed();
@@ -79,6 +89,15 @@ MainWindow::MainWindow(QWidget *parent)
     : QWidget(parent)
     , settings_(AppSettings::load())
 {
+    if (const auto tunnel = detectTorrentsTunnel(settings_.i2pdDir, settings_.tunnelsConf)) {
+        settings_.rpcUrl = tunnel->rpcUrl();
+        settings_.rpcAuth = tunnel->rpcAuth;
+        settings_.rpcUser = tunnel->rpcUser;
+        settings_.rpcPass = tunnel->rpcPass;
+        if (!tunnel->torrentsDir.isEmpty()) {
+            settings_.torrentsDir = tunnel->torrentsDir;
+        }
+    }
     setObjectName(QStringLiteral("MainWindow"));
     const auto [width, height] = settings_.windowSize();
     resize(width, height);
@@ -388,7 +407,8 @@ void MainWindow::setStatus()
     } else if (statusMode_ == QStringLiteral("offline")) {
         text = trKey(QStringLiteral("rpc_offline"));
         objectName = QStringLiteral("StatusOffline");
-        tip = trKey(QStringLiteral("rpc_setup_tip"));
+        tip = trArgs(QStringLiteral("rpc_setup_tip"),
+                     {{QStringLiteral("trackers"), defaultI2pTrackersConf()}});
         if (!statusDetail_.isEmpty()) {
             tip = statusDetail_ + QStringLiteral("\n\n") + tip;
         }
@@ -396,7 +416,8 @@ void MainWindow::setStatus()
     } else {
         text = trKey(QStringLiteral("connecting"));
         objectName = QStringLiteral("StatusOffline");
-        tip = trKey(QStringLiteral("rpc_setup_tip"));
+        tip = trArgs(QStringLiteral("rpc_setup_tip"),
+                     {{QStringLiteral("trackers"), defaultI2pTrackersConf()}});
         cursor = WHATS_THIS_CURSOR;
     }
 
@@ -425,11 +446,19 @@ void MainWindow::setFilter(const QString &name)
     if (stack_ != nullptr) {
         stack_->setCurrentIndex(0);
     }
+    syncSidebarChecks();
+    renderCards();
+}
+
+void MainWindow::syncSidebarChecks()
+{
     const QStringList keys = {QStringLiteral("all"), QStringLiteral("downloading"), QStringLiteral("seeding")};
     for (int index = 0; index < 3; ++index) {
-        setChecked(reinterpret_cast<quintptr>(filterButtons_[index]), keys[index] == filter_);
+        setChecked(reinterpret_cast<quintptr>(filterButtons_[index]), !catalogMode_ && keys[index] == filter_);
     }
-    renderCards();
+    if (postmanButton_ != nullptr) {
+        setChecked(reinterpret_cast<quintptr>(postmanButton_), catalogMode_);
+    }
 }
 
 QVector<Torrent> MainWindow::visibleTorrents() const
@@ -679,7 +708,7 @@ void MainWindow::showFiles(qint64 torrentId, const QString &name)
     std::optional<QString> endpoint = normalizeRpcUrl(settings_.rpcUrl, &error);
     QVector<TorrentFile> files;
     if (endpoint.has_value()) {
-        RpcClient client(*endpoint);
+        RpcClient client(*endpoint, credentialsFrom(settings_));
         files = client.getTorrentFiles(torrentId, &error);
     }
     const QString stylesheetText = stylesheet(settings_.theme);
@@ -687,13 +716,14 @@ void MainWindow::showFiles(qint64 torrentId, const QString &name)
               stylesheetText,
               name,
               files,
-              [this, torrentId, rpcUrl = settings_.rpcUrl](int index, int wanted, int priority) {
+              [this, torrentId, rpcUrl = settings_.rpcUrl, credentials = credentialsFrom(settings_)](
+                  int index, int wanted, int priority) {
                   QString err;
                   const std::optional<QString> endpoint = normalizeRpcUrl(rpcUrl, &err);
                   if (!endpoint.has_value()) {
                       return -1;
                   }
-                  RpcClient client(*endpoint);
+                  RpcClient client(*endpoint, credentials);
                   if (!client.setFilePriority(torrentId, index, wanted != 0, priority, &err)) {
                       return rpcMethodUnsupported(err) ? 1 : -1;
                   }
@@ -707,7 +737,7 @@ void MainWindow::showPeers(qint64 torrentId, const QString &name)
     std::optional<QString> endpoint = normalizeRpcUrl(settings_.rpcUrl, &error);
     QVector<Peer> peers;
     if (endpoint.has_value()) {
-        RpcClient client(*endpoint);
+        RpcClient client(*endpoint, credentialsFrom(settings_));
         peers = client.getTorrentPeers(torrentId, &error);
     }
     const QString title = trArgs(QStringLiteral("peers_title"), {{QStringLiteral("name"), name}});
@@ -724,7 +754,7 @@ void MainWindow::showTrackers(qint64 torrentId, const QString &name)
     std::optional<QString> endpoint = normalizeRpcUrl(settings_.rpcUrl, &error);
     QVector<Tracker> trackers;
     if (endpoint.has_value()) {
-        RpcClient client(*endpoint);
+        RpcClient client(*endpoint, credentialsFrom(settings_));
         trackers = client.getTorrentTrackers(torrentId, &error);
     }
     const QString title = trArgs(QStringLiteral("trackers_title"), {{QStringLiteral("name"), name}});
@@ -738,7 +768,8 @@ void MainWindow::showTrackers(qint64 torrentId, const QString &name)
 void MainWindow::startStopTorrent(qint64 torrentId, bool start)
 {
     const QString rpcUrl = settings_.rpcUrl;
-    QThread *thread = QThread::create([this, torrentId, rpcUrl, start]() {
+    const RpcCredentials credentials = credentialsFrom(settings_);
+    QThread *thread = QThread::create([this, torrentId, rpcUrl, start, credentials]() {
         QString error;
         std::optional<QString> endpoint = normalizeRpcUrl(rpcUrl, &error);
         if (!endpoint.has_value()) {
@@ -746,7 +777,7 @@ void MainWindow::startStopTorrent(qint64 torrentId, bool start)
                                       Qt::QueuedConnection);
             return;
         }
-        RpcClient client(*endpoint);
+        RpcClient client(*endpoint, credentials);
         const bool ok = start ? client.startTorrent(torrentId, &error) : client.stopTorrent(torrentId, &error);
         if (!ok) {
             QMetaObject::invokeMethod(this, [this, error, start]() { onStartStopReady(error, start); },
@@ -772,14 +803,15 @@ void MainWindow::confirmRemoveTorrent(qint64 torrentId, const QString &name)
         return;
     }
     const QString rpcUrl = settings_.rpcUrl;
-    QThread *thread = QThread::create([this, torrentId, rpcUrl, deleteData = *deleteData]() {
+    const RpcCredentials credentials = credentialsFrom(settings_);
+    QThread *thread = QThread::create([this, torrentId, rpcUrl, deleteData = *deleteData, credentials]() {
         QString error;
         std::optional<QString> endpoint = normalizeRpcUrl(rpcUrl, &error);
         if (!endpoint.has_value()) {
             QMetaObject::invokeMethod(this, [this, error]() { onRemovedReady(error); }, Qt::QueuedConnection);
             return;
         }
-        RpcClient client(*endpoint);
+        RpcClient client(*endpoint, credentials);
         if (!client.removeTorrent(torrentId, deleteData, &error)) {
             QMetaObject::invokeMethod(this, [this, error]() { onRemovedReady(error); }, Qt::QueuedConnection);
             return;
@@ -812,12 +844,13 @@ void MainWindow::spawnRefresh()
 
     const QString endpoint = settings_.rpcUrl;
     const bool detailed = settings_.torrentView != QStringLiteral("simple");
-    QThread *thread = QThread::create([this, endpoint, detailed]() {
+    const RpcCredentials credentials = credentialsFrom(settings_);
+    QThread *thread = QThread::create([this, endpoint, detailed, credentials]() {
         QString error;
         std::optional<QString> normalized = normalizeRpcUrl(endpoint, &error);
         QVector<Torrent> rows;
         if (normalized.has_value()) {
-            RpcClient client(*normalized);
+            RpcClient client(*normalized, credentials);
             rows = client.getTorrents(detailed, &error);
         }
         QMetaObject::invokeMethod(this,
@@ -926,11 +959,12 @@ void MainWindow::startAddMagnet(const QString &magnet)
 
     const QString rpcUrl = settings_.rpcUrl;
     const QString payload = *normalized;
-    QThread *thread = QThread::create([this, rpcUrl, payload]() {
+    const RpcCredentials credentials = credentialsFrom(settings_);
+    QThread *thread = QThread::create([this, rpcUrl, payload, credentials]() {
         QString error;
         std::optional<QString> endpoint = normalizeRpcUrl(rpcUrl, &error);
         if (endpoint.has_value()) {
-            RpcClient client(*endpoint);
+            RpcClient client(*endpoint, credentials);
             if (client.addTorrentMagnet(payload, &error).isEmpty() && !error.isEmpty()) {
                 // keep error
             }
@@ -969,7 +1003,7 @@ void MainWindow::startAddMetainfo(const QByteArray &content, const QString &pref
         if (rpcOnline) {
             std::optional<QString> endpoint = normalizeRpcUrl(settings.rpcUrl, &error);
             if (endpoint.has_value()) {
-                RpcClient client(*endpoint);
+                RpcClient client(*endpoint, credentialsFrom(settings));
                 if (client.addTorrentBytes(content, &error).isEmpty() && !error.isEmpty()) {
                     // keep error
                 }
@@ -1007,6 +1041,8 @@ void MainWindow::openSettingsDialog()
     defer([this]() {
         const QString previous = language();
         const AppSettings current = settings_;
+        const std::optional<TorrentsTunnelConfig> tunnelBefore =
+            detectTorrentsTunnel(current.i2pdDir, current.tunnelsConf);
         const std::optional<SettingsResult> result =
             settingsExec(this, stylesheet(current.theme), current);
         if (!result.has_value()) {
@@ -1031,6 +1067,11 @@ void MainWindow::openSettingsDialog()
                                   normalizeCatalogProxy(settings_.catalogProxy) !=
                                       normalizeCatalogProxy(result->catalogProxy);
         settings_.rpcUrl = result->rpcUrl;
+        settings_.rpcAuth = result->rpcAuth;
+        settings_.rpcUser = result->rpcUser;
+        settings_.rpcPass = result->rpcPass;
+        settings_.i2pdDir = result->i2pdDir;
+        settings_.tunnelsConf = result->tunnelsConf;
         settings_.torrentsDir = result->torrentsDir;
         settings_.refreshSeconds = result->refreshSeconds;
         settings_.httpProxyPort = result->httpProxyPort;
@@ -1054,6 +1095,20 @@ void MainWindow::openSettingsDialog()
         }
         settings_.captureWindowSize(width(), height());
         settings_.save();
+        const auto beforeEndpoint =
+            tunnelBefore.has_value() ? rpcListenEndpoint(tunnelBefore->rpcUrl()) : std::nullopt;
+        const auto afterEndpoint = rpcListenEndpoint(result->rpcUrl);
+        const bool tunnelChanged =
+            !tunnelBefore.has_value() || tunnelBefore->rpcAuth != result->rpcAuth ||
+            tunnelBefore->rpcUser != result->rpcUser || tunnelBefore->rpcPass != result->rpcPass ||
+            tunnelBefore->torrentsDir != result->torrentsDir || !beforeEndpoint.has_value() ||
+            !afterEndpoint.has_value() || beforeEndpoint->port != afterEndpoint->port ||
+            beforeEndpoint->path != afterEndpoint->path;
+        if (tunnelChanged) {
+            QMessageBox::information(this,
+                                     trKey(QStringLiteral("settings_title")),
+                                     trKey(QStringLiteral("settings_rpc_auth_restart")));
+        }
         refreshTimer_.start(static_cast<int>(std::max(settings_.refreshSeconds, quint32(2)) * 1000));
         applyChrome();
         renderCards();
@@ -1317,9 +1372,7 @@ void MainWindow::showCatalog()
     if (stack_ != nullptr) {
         stack_->setCurrentIndex(1);
     }
-    if (postmanButton_ != nullptr) {
-        setChecked(reinterpret_cast<quintptr>(postmanButton_), true);
-    }
+    syncSidebarChecks();
     renderCatalog();
     if (!catalogLoaded_) {
         spawnCatalog();

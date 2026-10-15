@@ -63,22 +63,25 @@ A desktop client for i2pd’s torrent tunnel, built with **C++17** and **Qt 6 Wi
 ```ini
 [MyTorrents]
 type=torrents
-trackers=http://tracker2.postman.i2p/announce.php
+trackers=http://tracker2.postman.i2p/announce.php,http://opentracker.dg2.i2p/a,http://opentracker.r4sas.i2p/announce,http://opentracker.simp.i2p/a,http://tracker.eeptorrent.i2p/a,http://opentracker.fattydove.i2p/a,http://opentracker-actix.i2p/announce,http://opentracker.bt.i2p/a,http://vern.i2p:6969/announce,http://atia.i2p/announce,http://sigmatracker.i2p/a,http://opentracker.skank.i2p/a,http://omitracker.i2p/announce,http://psa.i2p/a,http://tracker.nyaa2p.i2p/announce
 torrentsdir=/path/to/torrents
 rpcport=9191
 rpcpath=mytorrents
+rpcauth=true
+rpcuser=i2ptorrents
+rpcpass=change-me
 dht=true
 ```
 
-Do not change the tracker. Create `torrentsdir` and ensure the i2pd process can write to it.
+Keep Postman first; the extra I2P opentrackers help swarms find more peers. Create `torrentsdir` and ensure the i2pd process can write to it. The GUI can later overwrite `rpcport`, `rpcpath`, `torrentsdir`, `trackers`, and the RPC login from Settings.
 
 **Where `tunnels.conf` usually lives**
 
-| OS | Paths (first existing with `type=torrents` wins) |
+| OS | Paths (a writable file with `type=torrents` wins) |
 | --- | --- |
-| Windows | `%APPDATA%\i2pd\tunnels.conf`, `%LOCALAPPDATA%\i2pd\tunnels.conf` |
+| Windows | `%APPDATA%\i2pd\tunnels.conf`, `%ProgramData%\i2pd\tunnels.conf` (service) |
 | macOS | `~/Library/Application Support/i2pd/tunnels.conf`, `~/.i2pd/tunnels.conf` |
-| Linux | `/var/lib/i2pd/tunnels.conf`, `~/.i2pd/tunnels.conf`, `/etc/i2pd/tunnels.conf`, `/etc/i2pd/tunnels.d/*.conf` |
+| Linux | `~/.i2pd/tunnels.conf`, `/var/lib/i2pd/tunnels.conf` (service), `/etc/i2pd/tunnels.conf`, `tunnels.d`, `tunnels.conf.d` |
 
 3. Restart i2pd.
 4. Check RPC:
@@ -90,7 +93,7 @@ curl -sS -X POST http://127.0.0.1:9191/mytorrents/rpc/ \
 ```
 
 The GUI turns `http://127.0.0.1:9191/mytorrents` into `/mytorrents/rpc/`.
-i2pd RPC has no authentication or TLS, so the GUI only allows loopback (`localhost`, `127.0.0.0/8`, `::1`).
+RPC stays on loopback (`localhost`, `127.0.0.0/8`, `::1`). With `rpcauth=true`, the GUI sends HTTP Basic for that tunnel.
 
 #### Linux notes (system i2pd)
 
@@ -208,9 +211,7 @@ Push a version tag matching `VERSION`, or run **Actions → Release → Run work
 ### First run
 
 1. Start i2pd with a working `[MyTorrents]` section.
-2. Open **Settings**:
-   - **RPC address** — read-only from `rpcport` / `rpcpath` in `tunnels.conf`. Change those keys and restart i2pd.
-   - **Torrents folder** — read-only from `torrentsdir`. **Browse** opens the folder in the OS file manager; change the path only in i2pd’s config, then restart i2pd.
+2. Open **Settings**. The i2pd directory and `tunnels.conf` are filled in after detection; change either path if the daemon lives somewhere else. Saving writes `rpcport`, `rpcpath`, `torrentsdir`, `rpcauth`, `rpcuser`, and `rpcpass` into that file. Restart i2pd afterwards. The file and its folder must be writable by the GUI user.
 3. Offline fallback (RPC unavailable): the GUI may copy a `.torrent` into the saved folder path — that still needs write permission on `torrentsdir`.
 4. **Create torrent** builds a BitTorrent v1 `.torrent` locally (SHA-1 pieces, like `transmission-create`). Default announce comes from `trackers=` in `tunnels.conf`. Optionally add the new file to i2pd via RPC. For seeding, keep the data under `torrentsdir` with matching paths.
 
@@ -258,22 +259,25 @@ Current i2pd exposes `torrent-add`, `torrent-get`, `torrent-remove`, `torrent-st
 ```ini
 [MyTorrents]
 type=torrents
-trackers=http://tracker2.postman.i2p/announce.php
+trackers=http://tracker2.postman.i2p/announce.php,http://opentracker.dg2.i2p/a,http://opentracker.r4sas.i2p/announce,http://opentracker.simp.i2p/a,http://tracker.eeptorrent.i2p/a,http://opentracker.fattydove.i2p/a,http://opentracker-actix.i2p/announce,http://opentracker.bt.i2p/a,http://vern.i2p:6969/announce,http://atia.i2p/announce,http://sigmatracker.i2p/a,http://opentracker.skank.i2p/a,http://omitracker.i2p/announce,http://psa.i2p/a,http://tracker.nyaa2p.i2p/announce
 torrentsdir=/path/to/torrents
 rpcport=9191
 rpcpath=mytorrents
+rpcauth=true
+rpcuser=i2ptorrents
+rpcpass=change-me
 dht=true
 ```
 
-Трекер менять не следует. Создайте `torrentsdir` и дайте процессу i2pd право записи.
+Postman оставьте первым; остальные I2P opentracker помогают рою найти больше пиров. Создайте `torrentsdir` и дайте процессу i2pd право записи. Позже GUI может перезаписать из Настроек `rpcport`, `rpcpath`, `torrentsdir`, `trackers` и логин RPC.
 
 **Где обычно лежит `tunnels.conf`**
 
-| ОС | Пути (берётся первый существующий с `type=torrents`) |
+| ОС | Пути (сначала тот, который можно записать) |
 | --- | --- |
-| Windows | `%APPDATA%\i2pd\tunnels.conf`, `%LOCALAPPDATA%\i2pd\tunnels.conf` |
+| Windows | `%APPDATA%\i2pd\tunnels.conf`, `%ProgramData%\i2pd\tunnels.conf` (служба) |
 | macOS | `~/Library/Application Support/i2pd/tunnels.conf`, `~/.i2pd/tunnels.conf` |
-| Linux | `/var/lib/i2pd/tunnels.conf`, `~/.i2pd/tunnels.conf`, `/etc/i2pd/tunnels.conf`, `/etc/i2pd/tunnels.d/*.conf` |
+| Linux | `~/.i2pd/tunnels.conf`, `/var/lib/i2pd/tunnels.conf` (служба), `/etc/i2pd/tunnels.conf`, `tunnels.d`, `tunnels.conf.d` |
 
 3. Перезапустите i2pd.
 4. Проверьте RPC:
@@ -285,7 +289,7 @@ curl -sS -X POST http://127.0.0.1:9191/mytorrents/rpc/ \
 ```
 
 GUI превращает `http://127.0.0.1:9191/mytorrents` в `/mytorrents/rpc/`.
-Без авторизации и TLS разрешён только loopback.
+RPC остаётся на loopback. При `rpcauth=true` GUI шлёт HTTP Basic для этого туннеля.
 
 #### Заметки для Linux (системный i2pd)
 
@@ -394,9 +398,7 @@ ctest --test-dir build --output-on-failure
 ### Первый запуск
 
 1. Запустите i2pd с рабочей секцией `[MyTorrents]`.
-2. Откройте **Настройки**:
-   - **Адрес RPC** — только чтение из `rpcport` / `rpcpath` в `tunnels.conf`. Меняйте эти ключи и перезапускайте i2pd.
-   - **Каталог торрентов** — только чтение из `torrentsdir`. **Обзор** открывает папку в проводнике ОС; путь меняйте только в конфиге i2pd и перезапускайте демон.
+2. Откройте **Настройки**. Каталог i2pd и `tunnels.conf` подставляются после автодетекта; путь можно задать свой. Сохранение записывает в этот файл `rpcport`, `rpcpath`, `torrentsdir`, `rpcauth`, `rpcuser` и `rpcpass`. Затем перезапустите i2pd. У пользователя GUI должны быть права на запись файла и его каталога.
 3. Offline-fallback: при недоступном RPC GUI может копировать `.torrent` в сохранённый путь — нужны права записи на `torrentsdir`.
 4. **Создать торрент** собирает BitTorrent v1 `.torrent` локально (SHA-1 кусков, как `transmission-create`). Announce по умолчанию из `trackers=` в `tunnels.conf`. Можно сразу добавить файл в i2pd через RPC. Для раздачи данные должны быть в `torrentsdir` с теми же путями.
 

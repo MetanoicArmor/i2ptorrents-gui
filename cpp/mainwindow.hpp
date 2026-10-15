@@ -51,6 +51,7 @@ private:
     void showCatalog();
     void buildCatalogPage();
     void fillCatalogCombos();
+    void syncSidebarChecks();
     void spawnCatalog();
     void renderCatalog();
     QWidget *makeCatalogCard(const PostmanTorrent &item);

@@ -30,9 +30,23 @@ constexpr int RPC_PEER_FIELD_COUNT = 2;
 constexpr int RPC_TRACKER_FIELD_COUNT = 3;
 
 std::optional<QString> normalizeRpcUrl(const QString &value, QString *error = nullptr);
+
+struct RpcListenEndpoint {
+    quint16 port = 9191;
+    QString path;
+};
+
+std::optional<RpcListenEndpoint> rpcListenEndpoint(const QString &value, QString *error = nullptr);
 std::optional<QString> normalizeMagnetLink(const QString &value, QString *error = nullptr);
 bool rpcMethodUnsupported(const QString &message);
 bool rpcMagnetUnsupported(const QString &message);
+QByteArray basicAuthorizationHeader(const QString &user, const QString &password);
+
+struct RpcCredentials {
+    bool enabled = false;
+    QString user;
+    QString password;
+};
 
 class RpcClient {
 public:
@@ -40,7 +54,7 @@ public:
                                                  const QByteArray &body,
                                                  QString *error)>;
 
-    explicit RpcClient(const QString &endpoint);
+    explicit RpcClient(const QString &endpoint, const RpcCredentials &credentials);
     RpcClient(QString endpoint, PostHandler handler);
 
     QString endpoint() const { return endpoint_; }
@@ -67,7 +81,10 @@ private:
     PostHandler post_;
     quint64 tag_ = 0;
 
-    static QByteArray defaultPost(const QString &endpoint, const QByteArray &body, QString *error);
+    static QByteArray defaultPost(const QString &endpoint,
+                                  const QByteArray &body,
+                                  const RpcCredentials &credentials,
+                                  QString *error);
     static QJsonValue rpcArguments(const QJsonObject &payload);
     QVector<Torrent> torrentRows(const QJsonValue &result, QString *error);
 };

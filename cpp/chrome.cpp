@@ -305,12 +305,11 @@ std::optional<CreateTorrentResult> createTorrentExec(QWidget *parent,
                                                      const QString &stylesheet,
                                                      bool rpcOnline)
 {
-    QString trackers = QStringLiteral("http://tracker2.postman.i2p/announce.php");
+    QStringList trackerList = defaultI2pTrackers();
     if (const auto tunnel = detectTorrentsTunnel()) {
-        if (!tunnel->trackers.isEmpty()) {
-            trackers = tunnel->trackers.join(QLatin1Char('\n'));
-        }
+        trackerList = mergeI2pTrackers(tunnel->trackers);
     }
+    const QString trackers = trackerList.join(QLatin1Char('\n'));
 
     Utf8Holder utf8;
     i2p_create_torrent_in input{
@@ -383,8 +382,19 @@ std::optional<SettingsResult> settingsExec(QWidget *parent,
     QString rpcTip = trKey(QStringLiteral("settings_rpc_tip"));
     QString dirTip = trKey(QStringLiteral("settings_dir_tip"));
     QString exampleNote = trKey(QStringLiteral("settings_example_note"));
-    if (const auto tunnel = detectTorrentsTunnel()) {
+    QString tunnelPath = display.tunnelsConf;
+    QString tunnelSection;
+    QString i2pdDir = display.i2pdDir;
+    if (const auto tunnel = detectTorrentsTunnel(display.i2pdDir, display.tunnelsConf)) {
         display.rpcUrl = tunnel->rpcUrl();
+        display.rpcAuth = tunnel->rpcAuth;
+        display.rpcUser = tunnel->rpcUser;
+        display.rpcPass = tunnel->rpcPass;
+        tunnelPath = tunnel->confPath;
+        tunnelSection = tunnel->sectionName;
+        if (i2pdDir.trimmed().isEmpty()) {
+            i2pdDir = tunnel->dataDir;
+        }
         if (!tunnel->torrentsDir.isEmpty()) {
             display.torrentsDir = tunnel->torrentsDir;
         }
@@ -437,9 +447,30 @@ std::optional<SettingsResult> settingsExec(QWidget *parent,
         utf8.add(trKey(QStringLiteral("settings_example_config"))),
         utf8.add(trKey(QStringLiteral("settings_example_title"))),
         utf8.add(exampleNote),
-        utf8.add(trKey(QStringLiteral("settings_example_body"))),
+        utf8.add(trArgs(QStringLiteral("settings_example_body"),
+                       {{QStringLiteral("trackers"), defaultI2pTrackersConf()}})),
         utf8.add(trKey(QStringLiteral("settings_example_copy"))),
         utf8.add(trKey(QStringLiteral("settings_example_copied"))),
+        utf8.add(trKey(QStringLiteral("settings_rpc_auth"))),
+        utf8.add(trKey(QStringLiteral("settings_rpc_auth_tip"))),
+        display.rpcAuth ? 1 : 0,
+        utf8.add(trKey(QStringLiteral("settings_rpc_user"))),
+        utf8.add(display.rpcUser),
+        utf8.add(trKey(QStringLiteral("settings_rpc_pass"))),
+        utf8.add(display.rpcPass),
+        utf8.add(tunnelPath),
+        utf8.add(tunnelSection),
+        utf8.add(trKey(QStringLiteral("settings_tunnels_missing"))),
+        utf8.add(trKey(QStringLiteral("settings_tunnels_write_failed"))),
+        utf8.add(trKey(QStringLiteral("settings_rpc_auth_invalid"))),
+        utf8.add(trKey(QStringLiteral("settings_i2pd_dir"))),
+        utf8.add(i2pdDir),
+        utf8.add(trKey(QStringLiteral("settings_i2pd_dir_tip"))),
+        utf8.add(trKey(QStringLiteral("settings_tunnels_conf"))),
+        utf8.add(tunnelPath),
+        utf8.add(trKey(QStringLiteral("settings_tunnels_conf_tip"))),
+        utf8.add(trKey(QStringLiteral("settings_conf_filter"))),
+        utf8.add(trKey(QStringLiteral("settings_tunnels_readonly"))),
         utf8.add(trKey(QStringLiteral("close"))),
         utf8.add(trKey(QStringLiteral("save"))),
         utf8.add(trKey(QStringLiteral("cancel"))),
@@ -449,6 +480,11 @@ std::optional<SettingsResult> settingsExec(QWidget *parent,
     }
     SettingsResult result;
     result.rpcUrl = QString::fromUtf8(i2p_settings_rpc());
+    result.rpcAuth = i2p_settings_rpc_auth() != 0;
+    result.rpcUser = QString::fromUtf8(i2p_settings_rpc_user());
+    result.rpcPass = QString::fromUtf8(i2p_settings_rpc_pass());
+    result.i2pdDir = QString::fromUtf8(i2p_settings_i2pd_dir());
+    result.tunnelsConf = QString::fromUtf8(i2p_settings_tunnels_conf());
     result.torrentsDir = QString::fromUtf8(i2p_settings_dir());
     result.refreshSeconds =
         static_cast<quint32>(std::clamp(i2p_settings_refresh(), 2, 60));

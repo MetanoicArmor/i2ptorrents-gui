@@ -120,6 +120,9 @@ AppSettings AppSettings::loadFrom(const QString &path)
     const QJsonObject obj = doc.object();
     AppSettings settings;
     settings.rpcUrl = jsonString(obj.value(QStringLiteral("rpc_url")), defaults.rpcUrl);
+    settings.rpcAuth = obj.value(QStringLiteral("rpc_auth")).toBool(false);
+    settings.rpcUser = jsonString(obj.value(QStringLiteral("rpc_user")), defaults.rpcUser);
+    settings.rpcPass = jsonString(obj.value(QStringLiteral("rpc_pass")), defaults.rpcPass);
     settings.torrentsDir =
         jsonString(obj.value(QStringLiteral("torrents_dir")), defaults.torrentsDir);
     settings.refreshSeconds = std::clamp(jsonUInt(obj.value(QStringLiteral("refresh_seconds")), 5),
@@ -140,6 +143,8 @@ AppSettings AppSettings::loadFrom(const QString &path)
         std::clamp(jsonUInt(obj.value(QStringLiteral("http_proxy_port")), defaults.httpProxyPort),
                    quint32(1),
                    quint32(65535)));
+    settings.i2pdDir = jsonString(obj.value(QStringLiteral("i2pd_dir")), defaults.i2pdDir);
+    settings.tunnelsConf = jsonString(obj.value(QStringLiteral("tunnels_conf")), defaults.tunnelsConf);
     settings.windowWidth =
         std::max(jsonUInt(obj.value(QStringLiteral("window_width")), DEFAULT_WINDOW_WIDTH),
                  quint32(MIN_WINDOW_WIDTH));
@@ -159,6 +164,9 @@ bool AppSettings::saveTo(const QString &path) const
     QDir().mkpath(QFileInfo(path).absolutePath());
     QJsonObject obj;
     obj.insert(QStringLiteral("rpc_url"), rpcUrl);
+    obj.insert(QStringLiteral("rpc_auth"), rpcAuth);
+    obj.insert(QStringLiteral("rpc_user"), rpcUser);
+    obj.insert(QStringLiteral("rpc_pass"), rpcPass);
     obj.insert(QStringLiteral("torrents_dir"), torrentsDir);
     obj.insert(QStringLiteral("refresh_seconds"), static_cast<int>(refreshSeconds));
     obj.insert(QStringLiteral("theme"), theme);
@@ -167,6 +175,8 @@ bool AppSettings::saveTo(const QString &path) const
     obj.insert(QStringLiteral("http_proxy"), httpProxy);
     obj.insert(QStringLiteral("catalog_proxy"), normalizeCatalogProxy(catalogProxy));
     obj.insert(QStringLiteral("http_proxy_port"), static_cast<int>(httpProxyPort));
+    obj.insert(QStringLiteral("i2pd_dir"), i2pdDir);
+    obj.insert(QStringLiteral("tunnels_conf"), tunnelsConf);
     obj.insert(QStringLiteral("window_width"), static_cast<int>(windowWidth));
     obj.insert(QStringLiteral("window_height"), static_cast<int>(windowHeight));
 
@@ -219,11 +229,13 @@ QString AppSettings::torrentsPath(QString *error) const
 
 bool operator==(const AppSettings &lhs, const AppSettings &rhs)
 {
-    return lhs.rpcUrl == rhs.rpcUrl && lhs.torrentsDir == rhs.torrentsDir
+    return lhs.rpcUrl == rhs.rpcUrl && lhs.rpcAuth == rhs.rpcAuth && lhs.rpcUser == rhs.rpcUser &&
+           lhs.rpcPass == rhs.rpcPass && lhs.torrentsDir == rhs.torrentsDir
            && lhs.refreshSeconds == rhs.refreshSeconds && lhs.theme == rhs.theme
            && lhs.language == rhs.language && lhs.torrentView == rhs.torrentView
            && lhs.httpProxy == rhs.httpProxy && lhs.catalogProxy == rhs.catalogProxy
-           && lhs.httpProxyPort == rhs.httpProxyPort
+           && lhs.httpProxyPort == rhs.httpProxyPort && lhs.i2pdDir == rhs.i2pdDir &&
+           lhs.tunnelsConf == rhs.tunnelsConf
            && lhs.windowWidth == rhs.windowWidth
            && lhs.windowHeight == rhs.windowHeight;
 }

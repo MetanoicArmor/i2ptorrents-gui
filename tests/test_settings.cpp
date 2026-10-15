@@ -20,6 +20,7 @@ private slots:
     void windowSizeRoundtrip();
     void windowSizeDefaultsWhenMissing();
     void windowSizeClampsMinimum();
+    void settingsRpcAuthRoundtrip();
 };
 
 void SettingsTests::settingsRoundtrip()
@@ -174,6 +175,29 @@ void SettingsTests::windowSizeClampsMinimum()
     const i2p::AppSettings loaded = i2p::AppSettings::loadFrom(path);
     QCOMPARE(loaded.windowWidth, quint32(i2p::MIN_WINDOW_WIDTH));
     QCOMPARE(loaded.windowHeight, quint32(i2p::MIN_WINDOW_HEIGHT));
+}
+
+void SettingsTests::settingsRpcAuthRoundtrip()
+{
+    QTemporaryDir dir;
+    const QString path = dir.path() + QStringLiteral("/settings.json");
+    i2p::AppSettings expected;
+    expected.rpcAuth = true;
+    expected.rpcUser = QStringLiteral("alice");
+    expected.rpcPass = QStringLiteral("p@ss:word");
+    expected.i2pdDir = QStringLiteral("/tmp/i2pd");
+    expected.tunnelsConf = QStringLiteral("/tmp/i2pd/tunnels.conf");
+    QVERIFY(expected.saveTo(path));
+    QCOMPARE(i2p::AppSettings::loadFrom(path), expected);
+
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+    file.write(R"({})");
+    file.close();
+    const i2p::AppSettings defaults = i2p::AppSettings::loadFrom(path);
+    QVERIFY(!defaults.rpcAuth);
+    QVERIFY(defaults.rpcUser.isEmpty());
+    QVERIFY(defaults.rpcPass.isEmpty());
 }
 
 int runSettingsTests(int argc, char *argv[])

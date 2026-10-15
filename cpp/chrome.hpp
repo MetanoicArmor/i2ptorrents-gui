@@ -40,6 +40,9 @@ private:
 
 struct SettingsResult {
     QString rpcUrl;
+    bool rpcAuth = false;
+    QString rpcUser;
+    QString rpcPass;
     QString torrentsDir;
     quint32 refreshSeconds = 5;
     QString language;
@@ -47,6 +50,8 @@ struct SettingsResult {
     QString torrentView;
     QString catalogProxy = QStringLiteral("http");
     quint16 httpProxyPort = 4444;
+    QString i2pdDir;
+    QString tunnelsConf;
 };
 
 void installRoundedTooltips();

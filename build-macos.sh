@@ -113,6 +113,37 @@ resolve_macos_builds() {
   [ "${#BUILD_SPECS[@]}" -gt 0 ] || die "no macOS builds selected (check MACOS_ARCHS and Qt installs)"
 }
 
+strip_bundle_xattrs() {
+  local app_dir="$1"
+  if command -v xattr >/dev/null 2>&1; then
+    xattr -cr "${app_dir}" 2>/dev/null || true
+  fi
+  if command -v dot_clean >/dev/null 2>&1; then
+    dot_clean -m "${app_dir}" 2>/dev/null || true
+  fi
+}
+
+# Widgets GUI does not need SVG icons, PDF images, the virtual keyboard, or QML.
+# Homebrew Qt ships those plugins; macdeployqt copies them and then fails to
+# resolve QtPdf/QtSvg/QtVirtualKeyboard rpaths. Drop them before signing.
+prune_unused_qt_plugins() {
+  local app_dir="$1"
+  local plugins="${app_dir}/Contents/PlugIns"
+  local frameworks="${app_dir}/Contents/Frameworks"
+  rm -f \
+    "${plugins}/iconengines/libqsvgicon.dylib" \
+    "${plugins}/imageformats/libqpdf.dylib" \
+    "${plugins}/platforminputcontexts/libqtvirtualkeyboardplugin.dylib"
+  rmdir "${plugins}/iconengines" 2>/dev/null || true
+  rmdir "${plugins}/platforminputcontexts" 2>/dev/null || true
+  rm -rf \
+    "${frameworks}/QtQml.framework" \
+    "${frameworks}/QtQmlMeta.framework" \
+    "${frameworks}/QtQmlModels.framework" \
+    "${frameworks}/QtQmlWorkerScript.framework" \
+    "${frameworks}/QtQuick.framework"
+}
+
 build_macos_release() {
   local arch_suffix="$1"
   local macos_arch="$2"
@@ -186,7 +217,6 @@ build_macos_release() {
 </dict>
 </plist>
 PLIST
-  touch "${app_dir}" "${app_dir}/Contents/Info.plist"
 
   local macdeployqt=""
   for candidate in \
@@ -215,14 +245,19 @@ PLIST
     export DYLD_FRAMEWORK_PATH="${qt_libs}${DYLD_FRAMEWORK_PATH:+:${DYLD_FRAMEWORK_PATH}}"
     deploy_args+=(-libpath="${qt_libs}")
   fi
+  strip_bundle_xattrs "${app_dir}"
   local deploy_log
   deploy_log="$(mktemp "${TMPDIR:-/tmp}/macdeployqt.XXXXXX")"
   if ! "${macdeployqt}" "${deploy_args[@]}" >"${deploy_log}" 2>&1; then
-    echo "WARNING: macdeployqt exited non-zero for ${arch_suffix}; log follows:" >&2
-    cat "${deploy_log}" >&2
-  elif grep -Eqi 'ERROR:|codesign' "${deploy_log}"; then
-    echo "WARNING: macdeployqt reported codesign/deploy noise for ${arch_suffix} (continuing):" >&2
-    grep -Ei 'ERROR:|codesign' "${deploy_log}" >&2 || true
+    if [ ! -d "${app_dir}/Contents/Frameworks" ]; then
+      echo "ERROR: macdeployqt failed for ${arch_suffix}:" >&2
+      cat "${deploy_log}" >&2
+      rm -f "${deploy_log}"
+      die "macdeployqt did not create Frameworks in ${app_dir}"
+    fi
+    echo "WARNING: macdeployqt exited non-zero for ${arch_suffix}; unused plugins will be pruned" >&2
+  elif grep -Eqi 'Cannot resolve rpath|Codesign signing error|resource fork' "${deploy_log}"; then
+    echo "WARNING: macdeployqt optional-plugin rpath/codesign noise for ${arch_suffix} (pruned next)" >&2
   fi
   rm -f "${deploy_log}"
   [ -d "${app_dir}/Contents/Frameworks" ] \
@@ -230,9 +265,8 @@ PLIST
   [ -x "${macos_dir}/${APP_NAME}" ] \
     || die "missing executable after macdeployqt: ${macos_dir}/${APP_NAME}"
 
-  if command -v xattr >/dev/null 2>&1; then
-    xattr -cr "${app_dir}" || echo "WARNING: xattr -cr failed for ${app_dir}" >&2
-  fi
+  prune_unused_qt_plugins "${app_dir}"
+  strip_bundle_xattrs "${app_dir}"
   if command -v codesign >/dev/null 2>&1; then
     echo "==> Ad-hoc codesign"
     if ! codesign --force --deep --sign - "${app_dir}"; then
@@ -275,10 +309,11 @@ for spec in "${BUILD_SPECS[@]}"; do
   BUILT_ZIPS+=("${PRIMARY_ZIP}")
 done
 
+# Previous runs may have left a real .app directory here. rm -f cannot
+# remove it, and ln -sfn would create a symlink *inside* that directory.
+rm -rf "${ROOT}/dist/${APP_NAME}.app"
 if [ "${#BUILD_SPECS[@]}" -eq 1 ]; then
-  ln -sfn "$(basename "${PRIMARY_APP}")" "${ROOT}/dist/${APP_NAME}.app"
-else
-  rm -f "${ROOT}/dist/${APP_NAME}.app"
+  ln -s "$(basename "${PRIMARY_APP}")" "${ROOT}/dist/${APP_NAME}.app"
 fi
 
 echo

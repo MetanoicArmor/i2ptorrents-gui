@@ -82,6 +82,50 @@ std::optional<QString> normalizeRpcUrl(const QString &value, QString *error)
     return parsed.toString(QUrl::FullyEncoded);
 }
 
+std::optional<RpcListenEndpoint> rpcListenEndpoint(const QString &value, QString *error)
+{
+    const std::optional<QString> normalized = normalizeRpcUrl(value, error);
+    if (!normalized.has_value()) {
+        return std::nullopt;
+    }
+    const QUrl url(*normalized);
+    const int port = url.port();
+    if (port <= 0 || port > 65535) {
+        if (error != nullptr) {
+            *error = trKey(QStringLiteral("rpc_url_invalid"));
+        }
+        return std::nullopt;
+    }
+    QString path = url.path();
+    while (path.endsWith(QLatin1Char('/'))) {
+        path.chop(1);
+    }
+    if (path.endsWith(QStringLiteral("/rpc"))) {
+        path.chop(4);
+    }
+    while (path.startsWith(QLatin1Char('/'))) {
+        path = path.mid(1);
+    }
+    while (path.endsWith(QLatin1Char('/'))) {
+        path.chop(1);
+    }
+    if (path.isEmpty()) {
+        path = QStringLiteral("mytorrents");
+    }
+    if (path.contains(QLatin1Char('#')) || path.contains(QLatin1Char('\n')) ||
+        path.contains(QLatin1Char('\r')) || path.contains(QLatin1Char('/')) ||
+        path.contains(QLatin1Char('\\')) || path.contains(QLatin1Char(' '))) {
+        if (error != nullptr) {
+            *error = trKey(QStringLiteral("rpc_url_invalid"));
+        }
+        return std::nullopt;
+    }
+    RpcListenEndpoint endpoint;
+    endpoint.port = static_cast<quint16>(port);
+    endpoint.path = path;
+    return endpoint;
+}
+
 bool rpcMethodUnsupported(const QString &message)
 {
     const QString lower = message.toLower();
@@ -224,9 +268,11 @@ std::optional<QString> normalizeMagnetLink(const QString &value, QString *error)
     return fail();
 }
 
-RpcClient::RpcClient(const QString &endpoint)
+RpcClient::RpcClient(const QString &endpoint, const RpcCredentials &credentials)
     : endpoint_(endpoint)
-    , post_(defaultPost)
+    , post_([credentials](const QString &target, const QByteArray &body, QString *error) {
+          return defaultPost(target, body, credentials, error);
+      })
 {
     if (const std::optional<QString> normalized = normalizeRpcUrl(endpoint)) {
         endpoint_ = *normalized;
@@ -241,13 +287,25 @@ RpcClient::RpcClient(QString endpoint, PostHandler handler)
 {
 }
 
-QByteArray RpcClient::defaultPost(const QString &endpoint, const QByteArray &body, QString *error)
+QByteArray basicAuthorizationHeader(const QString &user, const QString &password)
+{
+    const QByteArray token = (user + QLatin1Char(':') + password).toUtf8().toBase64();
+    return QByteArrayLiteral("Basic ") + token;
+}
+
+QByteArray RpcClient::defaultPost(const QString &endpoint,
+                                  const QByteArray &body,
+                                  const RpcCredentials &credentials,
+                                  QString *error)
 {
     QNetworkAccessManager manager;
     QNetworkRequest request{QUrl(endpoint)};
     request.setHeader(QNetworkRequest::ContentTypeHeader, QStringLiteral("application/json"));
     request.setRawHeader("Accept", "application/json");
     request.setRawHeader("User-Agent", "i2ptorrents-gui/0.1");
+    if (credentials.enabled) {
+        request.setRawHeader("Authorization", basicAuthorizationHeader(credentials.user, credentials.password));
+    }
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                          QNetworkRequest::ManualRedirectPolicy);
 
@@ -275,7 +333,9 @@ QByteArray RpcClient::defaultPost(const QString &endpoint, const QByteArray &bod
         const int code = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         const QString detail = QString::fromUtf8(reply->readAll()).trimmed();
         if (error) {
-            if (code > 0) {
+            if (code == 401) {
+                *error = trKey(QStringLiteral("rpc_unauthorized"));
+            } else if (code > 0) {
                 QHash<QString, QString> args;
                 args.insert(QStringLiteral("code"), QString::number(code));
                 args.insert(QStringLiteral("detail"), detail);

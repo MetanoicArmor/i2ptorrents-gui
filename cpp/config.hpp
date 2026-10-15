@@ -13,6 +13,9 @@ inline constexpr int DEFAULT_WINDOW_HEIGHT = 700;
 
 struct AppSettings {
     QString rpcUrl = QStringLiteral("http://127.0.0.1:9191/mytorrents");
+    bool rpcAuth = false;
+    QString rpcUser;
+    QString rpcPass;
     QString torrentsDir;
     quint32 refreshSeconds = 5;
     QString theme = QStringLiteral("night");
@@ -21,6 +24,8 @@ struct AppSettings {
     QString httpProxy = QStringLiteral("socks5://127.0.0.1:4447");
     QString catalogProxy = QStringLiteral("http");
     quint16 httpProxyPort = 4444;
+    QString i2pdDir;
+    QString tunnelsConf;
     quint32 windowWidth = DEFAULT_WINDOW_WIDTH;
     quint32 windowHeight = DEFAULT_WINDOW_HEIGHT;
 
