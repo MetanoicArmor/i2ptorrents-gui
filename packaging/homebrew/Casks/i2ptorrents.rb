@@ -12,15 +12,15 @@ cask "i2ptorrents" do
     strategy :github_latest
   end
 
-  depends_on macos: ">= :big_sur"
+  depends_on macos: :big_sur
   depends_on arch: :arm64
 
   app "I2PTorrents-arm64.app", target: "I2PTorrents.app"
 
-  postflight do
-    system_command "/usr/bin/xattr",
-                   args: ["-dr", "com.apple.quarantine", "#{appdir}/I2PTorrents.app"],
-                   sudo: false
+  postflight_steps do
+    run "/usr/bin/xattr",
+        args:         ["-dr", "com.apple.quarantine", "{{appdir}}/I2PTorrents.app"],
+        must_succeed: false
   end
 
   caveats <<~EOS
