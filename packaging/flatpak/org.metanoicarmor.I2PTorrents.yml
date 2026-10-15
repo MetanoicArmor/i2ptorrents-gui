@@ -25,13 +25,13 @@ modules:
     sources:
       - type: file
         url: https://github.com/MetanoicArmor/i2ptorrents-gui/releases/download/v0.2.7/I2PTorrents-linux-x86_64-v0.2.7.AppImage
-        sha256: REPLACE_AFTER_RELEASE
+        sha256: 0fe8f245ba99ad65debb7f4ffa7d2b5a7483f010feb3b9be0dbb419536984b2e
         dest-filename: I2PTorrents.AppImage
       - type: file
         path: i2ptorrents-entry.sh
       - type: file
         path: i2ptorrents.desktop
       - type: file
-        url: https://github.com/MetanoicArmor/i2ptorrents-gui/raw/v0.2.7/icon.png
-        sha256: REPLACE_AFTER_RELEASE
+        url: https://github.com/MetanoicArmor/i2ptorrents-gui/releases/download/v0.2.7/icon.png
+        sha256: 6adbf821b884b61d6ea76fff623d42dca77e5acbc8cd0dd7efb8551fe5ee4797
         dest-filename: icon.png

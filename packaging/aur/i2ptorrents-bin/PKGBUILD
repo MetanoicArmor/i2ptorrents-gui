@@ -9,15 +9,15 @@ url="https://github.com/MetanoicArmor/i2ptorrents-gui"
 license=('BSD-3-Clause')
 depends=('hicolor-icon-theme' 'zlib' 'fuse2')
 options=('!strip')
-_icon="icon.png::${url}/raw/v${pkgver}/icon.png"
+_icon="icon.png::${url}/releases/download/v${pkgver}/icon.png"
 source_x86_64=("I2PTorrents-linux-x86_64-v${pkgver}.AppImage::${url}/releases/download/v${pkgver}/I2PTorrents-linux-x86_64-v${pkgver}.AppImage"
                "${_icon}")
 source_aarch64=("I2PTorrents-linux-aarch64-v${pkgver}.AppImage::${url}/releases/download/v${pkgver}/I2PTorrents-linux-aarch64-v${pkgver}.AppImage"
                 "${_icon}")
-sha256sums_x86_64=('REPLACE_AFTER_RELEASE'
-                   'REPLACE_AFTER_RELEASE')
-sha256sums_aarch64=('REPLACE_AFTER_RELEASE'
-                    'REPLACE_AFTER_RELEASE')
+sha256sums_x86_64=('0fe8f245ba99ad65debb7f4ffa7d2b5a7483f010feb3b9be0dbb419536984b2e'
+                   '6adbf821b884b61d6ea76fff623d42dca77e5acbc8cd0dd7efb8551fe5ee4797')
+sha256sums_aarch64=('d2ed731869afd5a57e898f7ae4e798f718931a7aa156adc762f8bc3fb887faa0'
+                    '6adbf821b884b61d6ea76fff623d42dca77e5acbc8cd0dd7efb8551fe5ee4797')
 
 package() {
   cd "$srcdir"

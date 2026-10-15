@@ -66,15 +66,26 @@ for f in ${FILES}; do
   esac
 done
 
-icon_url="https://github.com/${REPO}/raw/v${TAG}/icon.png"
-icon_sum="$(curl -fsSL "${icon_url}" | hash_cmd | awk '{print $1}')"
-printf '%s  icon.png (raw v%s)\n' "${icon_sum}" "${TAG}"
+icon_sum="MISSING"
+for icon_url in \
+  "https://github.com/${REPO}/releases/download/v${TAG}/icon.png" \
+  "https://github.com/${REPO}/raw/v${TAG}/icon.png" \
+  "https://raw.githubusercontent.com/${REPO}/master/icon.png"
+do
+  if icon_sum="$(curl -fsSL "${icon_url}" | hash_cmd | awk '{print $1}')"; then
+    printf '%s  icon.png (%s)\n' "${icon_sum}" "${icon_url}"
+    break
+  fi
+  icon_sum="MISSING"
+done
 
 echo
-echo "# --- Homebrew cask (on_arm / on_intel) ---"
+echo "# --- Homebrew cask ---"
 echo "  version \"${TAG}\""
 echo "  # arm64 sha256 \"${MAC_ARM}\""
-echo "  # x64   sha256 \"${MAC_X64}\""
+if [ "${MAC_X64}" != "REPLACE_AFTER_RELEASE" ]; then
+  echo "  # x64   sha256 \"${MAC_X64}\""
+fi
 echo "# --- winget InstallerSha256 ---"
 echo "  # x64   ${WIN_X64}"
 echo "  # arm64 ${WIN_ARM}"
