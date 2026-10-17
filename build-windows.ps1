@@ -31,20 +31,19 @@ function Copy-MsvcCrt {
         throw "Visual Studio installation not found"
     }
     $installPath = $installPath.Trim()
-    $redistRoot = Join-Path $installPath "VC\Redist\MSVC"
-    $versionDir = Get-ChildItem -LiteralPath $redistRoot -Directory -ErrorAction SilentlyContinue |
-        Sort-Object Name -Descending |
-        Select-Object -First 1
-    if (-not $versionDir) {
-        throw "MSVC redist not found under $redistRoot"
-    }
-    $archDir = Join-Path $versionDir.FullName $Arch
-    $crt = Get-ChildItem -LiteralPath $archDir -Directory -ErrorAction SilentlyContinue |
-        Where-Object { $_.Name -like "Microsoft.VC*.CRT" -and $_.Name -notlike "*Debug*" } |
-        Sort-Object Name -Descending |
+    $vcRoot = Join-Path $installPath "VC"
+    # VS 18 keeps vc_redist under VC\Redist\MSVC\v145, while the loose CRT DLLs
+    # live in a versioned folder such as 14.51.36231\x64\Microsoft.VC145.CRT.
+    $crt = Get-ChildItem -LiteralPath $vcRoot -Recurse -Directory -ErrorAction SilentlyContinue |
+        Where-Object {
+            $_.Name -like "Microsoft.VC*.CRT" -and
+            $_.Name -notlike "*Debug*" -and
+            $_.FullName -match "[\\/]$Arch[\\/]"
+        } |
+        Sort-Object FullName -Descending |
         Select-Object -First 1
     if (-not $crt) {
-        throw "MSVC CRT directory not found in $archDir"
+        throw "MSVC CRT directory not found under $vcRoot for arch $Arch"
     }
     Write-Host "==> Copying MSVC CRT from $($crt.FullName)"
     $names = @(
