@@ -17,6 +17,59 @@ function Invoke-NativeChecked {
     }
 }
 
+function Copy-MsvcCrt {
+    param(
+        [Parameter(Mandatory = $true)][string]$Destination,
+        [Parameter(Mandatory = $true)][string]$Arch
+    )
+    $vswhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio\Installer\vswhere.exe"
+    if (-not (Test-Path -LiteralPath $vswhere)) {
+        throw "vswhere.exe not found; cannot locate the MSVC CRT"
+    }
+    $installPath = (& $vswhere -latest -products * -property installationPath | Select-Object -First 1)
+    if (-not $installPath) {
+        throw "Visual Studio installation not found"
+    }
+    $installPath = $installPath.Trim()
+    $redistRoot = Join-Path $installPath "VC\Redist\MSVC"
+    $versionDir = Get-ChildItem -LiteralPath $redistRoot -Directory -ErrorAction SilentlyContinue |
+        Sort-Object Name -Descending |
+        Select-Object -First 1
+    if (-not $versionDir) {
+        throw "MSVC redist not found under $redistRoot"
+    }
+    $archDir = Join-Path $versionDir.FullName $Arch
+    $crt = Get-ChildItem -LiteralPath $archDir -Directory -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -like "Microsoft.VC*.CRT" -and $_.Name -notlike "*Debug*" } |
+        Sort-Object Name -Descending |
+        Select-Object -First 1
+    if (-not $crt) {
+        throw "MSVC CRT directory not found in $archDir"
+    }
+    Write-Host "==> Copying MSVC CRT from $($crt.FullName)"
+    $names = @(
+        "vcruntime140.dll",
+        "vcruntime140_1.dll",
+        "msvcp140.dll",
+        "msvcp140_1.dll",
+        "msvcp140_2.dll",
+        "concrt140.dll",
+        "vccorlib140.dll"
+    )
+    $required = @("vcruntime140.dll", "vcruntime140_1.dll", "msvcp140.dll")
+    foreach ($name in $names) {
+        $src = Join-Path $crt.FullName $name
+        if (Test-Path -LiteralPath $src) {
+            Copy-Item -LiteralPath $src -Destination (Join-Path $Destination $name) -Force
+        }
+        elseif ($required -contains $name) {
+            throw "Required CRT DLL missing: $src"
+        }
+    }
+    Get-ChildItem -LiteralPath $Destination -Filter "vc_redist.*.exe" -File -ErrorAction SilentlyContinue |
+        Remove-Item -Force
+}
+
 function Stop-I2PTorrentsProcesses {
     Get-Process -Name "I2PTorrents", "i2ptorrents-gui" -ErrorAction SilentlyContinue | ForEach-Object {
         Stop-Process -Id $_.Id -Force -ErrorAction SilentlyContinue
@@ -144,6 +197,10 @@ Invoke-NativeChecked $Windeploy @(
     "--no-translations",
     (Join-Path $Stage "$AppName.exe")
 )
+# windeployqt ships vc_redist.*.exe instead of the CRT DLLs. winget and a
+# plain zip launch the exe without running that installer, so Windows exits
+# with STATUS_DLL_NOT_FOUND (0xC0000135) looking for vcruntime140.dll.
+Copy-MsvcCrt -Destination $Stage -Arch $ArchSuffix
 
 $ZipFile = Join-Path $RepoRoot "$AppName-windows-$ArchSuffix-v$ReleaseVersion.zip"
 if (Test-Path -LiteralPath $ZipFile) {
