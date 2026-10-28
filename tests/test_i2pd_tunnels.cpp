@@ -28,6 +28,7 @@ private slots:
     void defaultDataDirsFollowI2pd();
     void defaultI2pTrackersIncludeOpentrackers();
     void mergeI2pTrackersKeepsPreferredFirst();
+    void writesDhtKeysWithoutReplacingExistingFile();
 };
 
 void I2pdTunnelsTests::parsesTorrentsSection()
@@ -460,6 +461,12 @@ port=4444
     QVERIFY(text.contains(QStringLiteral("[MyTorrents]")));
     QVERIFY(text.contains(QStringLiteral("http://opentracker.dg2.i2p/a")));
     QVERIFY(text.contains(QStringLiteral("http://tracker.nyaa2p.i2p/announce")));
+    QVERIFY(text.contains(QStringLiteral("udp://opentracker.dg2.i2p:6969")));
+    QVERIFY(text.contains(QStringLiteral("dht=true")));
+    QVERIFY(text.contains(QStringLiteral("dhtfile=torrents.dht")));
+    QVERIFY(config->dht);
+    QCOMPARE(config->dhtFile, QStringLiteral("torrents.dht"));
+    QVERIFY(config->haveDhtFile);
     QVERIFY(config->trackers.contains(QStringLiteral("http://opentracker.r4sas.i2p/announce")));
 }
 
@@ -500,9 +507,11 @@ void I2pdTunnelsTests::defaultI2pTrackersIncludeOpentrackers()
     QVERIFY(trackers.contains(QStringLiteral("http://omitracker.i2p/announce")));
     QVERIFY(trackers.contains(QStringLiteral("http://psa.i2p/a")));
     QVERIFY(trackers.contains(QStringLiteral("http://tracker.nyaa2p.i2p/announce")));
-    QCOMPARE(trackers.size(), 15);
-    QCOMPARE(QSet<QString>(trackers.begin(), trackers.end()).size(), 15);
-    QCOMPARE(i2p::defaultI2pTrackersConf().count(QLatin1Char(',')), 14);
+    QVERIFY(trackers.contains(QStringLiteral("udp://opentracker.dg2.i2p:6969")));
+    QVERIFY(trackers.contains(QStringLiteral("udp://tracker.insulaocculta.i2p:6969")));
+    QCOMPARE(trackers.size(), 17);
+    QCOMPARE(QSet<QString>(trackers.begin(), trackers.end()).size(), 17);
+    QCOMPARE(i2p::defaultI2pTrackersConf().count(QLatin1Char(',')), 16);
 }
 
 void I2pdTunnelsTests::mergeI2pTrackersKeepsPreferredFirst()
@@ -513,6 +522,40 @@ void I2pdTunnelsTests::mergeI2pTrackersKeepsPreferredFirst()
     QCOMPARE(merged.at(1), QStringLiteral("http://tracker2.postman.i2p/announce.php"));
     QVERIFY(merged.contains(QStringLiteral("http://opentracker.skank.i2p/a")));
     QCOMPARE(merged.size(), i2p::defaultI2pTrackers().size() + 1);
+}
+
+void I2pdTunnelsTests::writesDhtKeysWithoutReplacingExistingFile()
+{
+    QTemporaryDir dir;
+    const QString path = dir.path() + QStringLiteral("/tunnels.conf");
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Text));
+    file.write(R"([MyTorrents]
+type=torrents
+torrentsdir=/data/torrents
+dht=false
+dhtfile=custom.dht
+)");
+    file.close();
+
+    i2p::TorrentsTunnelConfig values;
+    values.rpcPort = 9292;
+    values.rpcPath = QStringLiteral("customrpc");
+    values.torrentsDir = QStringLiteral("/data/torrents");
+    QString error;
+    QVERIFY(i2p::writeTorrentsSection(path, QStringLiteral("MyTorrents"), values, false, &error));
+    QVERIFY(error.isEmpty());
+
+    const auto config = i2p::parseTorrentsTunnelFile(path);
+    QVERIFY(config.has_value());
+    QVERIFY(config->dht);
+    QVERIFY(config->haveDhtFile);
+    QCOMPARE(config->dhtFile, QStringLiteral("custom.dht"));
+    QFile written(path);
+    QVERIFY(written.open(QIODevice::ReadOnly | QIODevice::Text));
+    const QString text = QString::fromUtf8(written.readAll());
+    QVERIFY(text.contains(QStringLiteral("dht=true")));
+    QVERIFY(!text.contains(QStringLiteral("dhtfile=torrents.dht")));
 }
 
 int runI2pdTunnelsTests(int argc, char *argv[])

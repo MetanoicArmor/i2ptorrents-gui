@@ -28,6 +28,8 @@ private slots:
     void normalizeMagnetLinkAcceptsHexAndBase32();
     void setFilePrioritySendsTorrentSet();
     void startStopTorrentSendsIds();
+    void reannounceTorrentSendsIds();
+    void dhtStatsParsesCounts();
     void basicAuthorizationHeaderEncodesUserAndPassword();
     void rpcListenEndpointStripsRpcSuffix();
 };
@@ -498,6 +500,58 @@ void RpcTests::startStopTorrentSendsIds()
     QVERIFY(client.stopTorrent(4, &error));
     QCOMPARE(method, QStringLiteral("torrent-stop"));
     QCOMPARE(arguments.value(QStringLiteral("ids")).toArray().first().toInt(), 4);
+}
+
+void RpcTests::reannounceTorrentSendsIds()
+{
+    QString method;
+    QJsonObject arguments;
+    i2p::RpcClient client(
+        QStringLiteral("http://localhost:9191"),
+        [&](const QString &, const QByteArray &body, QString *) {
+            const QJsonObject payload = QJsonDocument::fromJson(body).object();
+            method = payload.value(QStringLiteral("method")).toString();
+            arguments = payload.value(QStringLiteral("arguments")).toObject();
+            return QJsonDocument(QJsonObject{{QStringLiteral("result"), QStringLiteral("success")},
+                                               {QStringLiteral("arguments"), QJsonObject{}}})
+                .toJson();
+        });
+    QString error;
+    QVERIFY(client.reannounceTorrent(9, &error));
+    QVERIFY(error.isEmpty());
+    QCOMPARE(method, QStringLiteral("torrent-reannounce"));
+    QCOMPARE(arguments.value(QStringLiteral("ids")).toArray().first().toInt(), 9);
+}
+
+void RpcTests::dhtStatsParsesCounts()
+{
+    i2p::RpcClient client(
+        QStringLiteral("http://localhost:9191"),
+        [](const QString &, const QByteArray &body, QString *) {
+            const QString method =
+                QJsonDocument::fromJson(body).object().value(QStringLiteral("method")).toString();
+            if (method != QStringLiteral("dht-stats")) {
+                return QByteArray();
+            }
+            const QJsonObject arguments{
+                {QStringLiteral("supported"), true},
+                {QStringLiteral("numNodes"), 12},
+                {QStringLiteral("numBuckets"), 3},
+                {QStringLiteral("numTorrents"), 4},
+            };
+            return QJsonDocument(QJsonObject{{QStringLiteral("result"), QStringLiteral("success")},
+                                               {QStringLiteral("arguments"), arguments}})
+                .toJson();
+        });
+    QString error;
+    const std::optional<i2p::DhtStats> stats = client.dhtStats(&error);
+    QVERIFY(error.isEmpty());
+    QVERIFY(stats.has_value());
+    QVERIFY(stats->known);
+    QVERIFY(stats->supported);
+    QCOMPARE(stats->nodes, quint64(12));
+    QCOMPARE(stats->buckets, quint64(3));
+    QCOMPARE(stats->torrents, quint64(4));
 }
 
 void RpcTests::basicAuthorizationHeaderEncodesUserAndPassword()

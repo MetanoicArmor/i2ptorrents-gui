@@ -3,6 +3,7 @@
 #include "config.hpp"
 #include "models.hpp"
 #include "postman_catalog.hpp"
+#include "rpc.hpp"
 
 #include <QTimer>
 #include <QWidget>
@@ -39,10 +40,11 @@ private slots:
     void dispatchFilterSeeding();
     void dispatchPostman();
     void pollWorker();
-    void onTorrentsReady(QVector<Torrent> torrents, QString error);
+    void onTorrentsReady(QVector<Torrent> torrents, QString error, DhtStats dht);
     void onAddedReady(std::optional<QString> savedPath, QString error, bool magnet = false);
     void onRemovedReady(QString error);
     void onStartStopReady(QString error, bool start);
+    void onReannounceReady(QString error);
 
 private:
     void applyChrome();
@@ -74,6 +76,7 @@ private:
     void showTrackers(qint64 torrentId, const QString &name);
     void confirmRemoveTorrent(qint64 torrentId, const QString &name);
     void startStopTorrent(qint64 torrentId, bool start);
+    void reannounceTorrent(qint64 torrentId);
     void openFolder(const QString &root, const QString &name);
     void openSettingsDialog();
     void openAboutDialog();
@@ -83,6 +86,7 @@ private:
 
     AppSettings settings_;
     QVector<Torrent> torrents_;
+    DhtStats dht_;
     QString filter_ = QStringLiteral("all");
     bool busy_ = false;
     bool adding_ = false;

@@ -48,6 +48,14 @@ struct RpcCredentials {
     QString password;
 };
 
+struct DhtStats {
+    bool known = false;
+    bool supported = false;
+    quint64 nodes = 0;
+    quint64 buckets = 0;
+    quint64 torrents = 0;
+};
+
 class RpcClient {
 public:
     using PostHandler = std::function<QByteArray(const QString &endpoint,
@@ -70,6 +78,8 @@ public:
     bool removeTorrent(qint64 torrentId, bool deleteData, QString *error = nullptr);
     bool startTorrent(qint64 torrentId, QString *error = nullptr);
     bool stopTorrent(qint64 torrentId, QString *error = nullptr);
+    bool reannounceTorrent(qint64 torrentId, QString *error = nullptr);
+    std::optional<DhtStats> dhtStats(QString *error = nullptr);
     bool setFilePriority(qint64 torrentId,
                          qint64 index,
                          bool wanted,

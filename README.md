@@ -77,7 +77,7 @@ Needs a running **i2pd** with a `type=torrents` tunnel (see below).
 ```ini
 [MyTorrents]
 type=torrents
-trackers=http://tracker2.postman.i2p/announce.php,http://opentracker.dg2.i2p/a,http://opentracker.r4sas.i2p/announce,http://opentracker.simp.i2p/a,http://tracker.eeptorrent.i2p/a,http://opentracker.fattydove.i2p/a,http://opentracker-actix.i2p/announce,http://opentracker.bt.i2p/a,http://vern.i2p:6969/announce,http://atia.i2p/announce,http://sigmatracker.i2p/a,http://opentracker.skank.i2p/a,http://omitracker.i2p/announce,http://psa.i2p/a,http://tracker.nyaa2p.i2p/announce
+trackers=http://tracker2.postman.i2p/announce.php,http://opentracker.dg2.i2p/a,http://opentracker.r4sas.i2p/announce,http://opentracker.simp.i2p/a,http://tracker.eeptorrent.i2p/a,http://opentracker.fattydove.i2p/a,http://opentracker-actix.i2p/announce,http://opentracker.bt.i2p/a,http://vern.i2p:6969/announce,http://atia.i2p/announce,http://sigmatracker.i2p/a,http://opentracker.skank.i2p/a,http://omitracker.i2p/announce,http://psa.i2p/a,http://tracker.nyaa2p.i2p/announce,udp://opentracker.dg2.i2p:6969,udp://tracker.insulaocculta.i2p:6969
 torrentsdir=/path/to/torrents
 rpcport=9191
 rpcpath=mytorrents
@@ -85,6 +85,7 @@ rpcauth=true
 rpcuser=i2ptorrents
 rpcpass=change-me
 dht=true
+dhtfile=torrents.dht
 ```
 
 Keep Postman first; the extra I2P opentrackers help swarms find more peers. Create `torrentsdir` and ensure the i2pd process can write to it. The GUI can later overwrite `rpcport`, `rpcpath`, `torrentsdir`, `trackers`, and the RPC login from Settings.
@@ -287,7 +288,7 @@ Current i2pd exposes `torrent-add`, `torrent-get`, `torrent-remove`, `torrent-st
 ```ini
 [MyTorrents]
 type=torrents
-trackers=http://tracker2.postman.i2p/announce.php,http://opentracker.dg2.i2p/a,http://opentracker.r4sas.i2p/announce,http://opentracker.simp.i2p/a,http://tracker.eeptorrent.i2p/a,http://opentracker.fattydove.i2p/a,http://opentracker-actix.i2p/announce,http://opentracker.bt.i2p/a,http://vern.i2p:6969/announce,http://atia.i2p/announce,http://sigmatracker.i2p/a,http://opentracker.skank.i2p/a,http://omitracker.i2p/announce,http://psa.i2p/a,http://tracker.nyaa2p.i2p/announce
+trackers=http://tracker2.postman.i2p/announce.php,http://opentracker.dg2.i2p/a,http://opentracker.r4sas.i2p/announce,http://opentracker.simp.i2p/a,http://tracker.eeptorrent.i2p/a,http://opentracker.fattydove.i2p/a,http://opentracker-actix.i2p/announce,http://opentracker.bt.i2p/a,http://vern.i2p:6969/announce,http://atia.i2p/announce,http://sigmatracker.i2p/a,http://opentracker.skank.i2p/a,http://omitracker.i2p/announce,http://psa.i2p/a,http://tracker.nyaa2p.i2p/announce,udp://opentracker.dg2.i2p:6969,udp://tracker.insulaocculta.i2p:6969
 torrentsdir=/path/to/torrents
 rpcport=9191
 rpcpath=mytorrents
@@ -295,6 +296,7 @@ rpcauth=true
 rpcuser=i2ptorrents
 rpcpass=change-me
 dht=true
+dhtfile=torrents.dht
 ```
 
 Postman оставьте первым; остальные I2P opentracker помогают рою найти больше пиров. Создайте `torrentsdir` и дайте процессу i2pd право записи. Позже GUI может перезаписать из Настроек `rpcport`, `rpcpath`, `torrentsdir`, `trackers` и логин RPC.

@@ -308,6 +308,8 @@ QStringList defaultI2pTrackers()
         QStringLiteral("http://omitracker.i2p/announce"),
         QStringLiteral("http://psa.i2p/a"),
         QStringLiteral("http://tracker.nyaa2p.i2p/announce"),
+        QStringLiteral("udp://opentracker.dg2.i2p:6969"),
+        QStringLiteral("udp://tracker.insulaocculta.i2p:6969"),
     };
 }
 
@@ -369,9 +371,12 @@ std::optional<TorrentsTunnelConfig> parseTorrentsTunnelFile(const QString &path)
     QString trackersRaw;
     QString rpcUser;
     QString rpcPass;
+    QString dhtFile;
     quint16 rpcPort = 9191;
     bool havePort = false;
     bool rpcAuth = false;
+    bool dht = true;
+    bool haveDhtFile = false;
 
     auto parseTrackers = [](const QString &raw) {
         QStringList out;
@@ -399,6 +404,9 @@ std::optional<TorrentsTunnelConfig> parseTorrentsTunnelFile(const QString &path)
         config.rpcUser = rpcUser;
         config.rpcPass = rpcPass;
         config.trackers = parseTrackers(trackersRaw);
+        config.dht = dht;
+        config.haveDhtFile = haveDhtFile;
+        config.dhtFile = dhtFile;
         return config;
     };
 
@@ -419,9 +427,12 @@ std::optional<TorrentsTunnelConfig> parseTorrentsTunnelFile(const QString &path)
             trackersRaw.clear();
             rpcUser.clear();
             rpcPass.clear();
+            dhtFile.clear();
             rpcPort = 9191;
             havePort = false;
             rpcAuth = false;
+            dht = true;
+            haveDhtFile = false;
             continue;
         }
         const int eq = line.indexOf(QLatin1Char('='));
@@ -451,6 +462,11 @@ std::optional<TorrentsTunnelConfig> parseTorrentsTunnelFile(const QString &path)
             rpcUser = value;
         } else if (key == QStringLiteral("rpcpass")) {
             rpcPass = value;
+        } else if (key == QStringLiteral("dht")) {
+            dht = parseConfigBool(value);
+        } else if (key == QStringLiteral("dhtfile")) {
+            dhtFile = value;
+            haveDhtFile = true;
         }
     }
     return finishSection();
@@ -583,7 +599,13 @@ bool writeTorrentsSection(const QString &path,
             }
         }
     }
-    const QList<TunnelKeyUpdate> updates = {
+    bool writeDhtFile = true;
+    if (const auto existing = parseTorrentsTunnelFile(path)) {
+        if (existing->sectionName == section.trimmed() && existing->haveDhtFile) {
+            writeDhtFile = false;
+        }
+    }
+    QList<TunnelKeyUpdate> updates = {
         {QStringLiteral("torrentsdir"), values.torrentsDir.trimmed()},
         {QStringLiteral("rpcport"), QString::number(values.rpcPort)},
         {QStringLiteral("rpcpath"), rpcPath},
@@ -591,7 +613,11 @@ bool writeTorrentsSection(const QString &path,
         {QStringLiteral("rpcuser"), values.rpcUser.trimmed()},
         {QStringLiteral("rpcpass"), values.rpcPass.trimmed()},
         {QStringLiteral("trackers"), mergeI2pTrackers(trackers).join(QLatin1Char(','))},
+        {QStringLiteral("dht"), QStringLiteral("true")},
     };
+    if (writeDhtFile) {
+        updates.append({QStringLiteral("dhtfile"), QStringLiteral("torrents.dht")});
+    }
     return writeTunnelKeys(path, section, updates, createSection, error);
 }
 

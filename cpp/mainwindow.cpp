@@ -432,11 +432,21 @@ void MainWindow::setStatus()
         down += torrent.rateDownload;
         up += torrent.rateUpload;
     }
-    setLabelText(reinterpret_cast<quintptr>(summaryLabel_),
-                 trArgs(QStringLiteral("summary"),
-                        {{QStringLiteral("count"), QString::number(torrents_.size())},
-                         {QStringLiteral("down"), formatRate(down)},
-                         {QStringLiteral("up"), formatRate(up)}}));
+    QHash<QString, QString> summaryArgs{
+        {QStringLiteral("count"), QString::number(torrents_.size())},
+        {QStringLiteral("down"), formatRate(down)},
+        {QStringLiteral("up"), formatRate(up)},
+    };
+    QString summaryKey = QStringLiteral("summary");
+    if (dht_.known && dht_.supported) {
+        summaryKey = QStringLiteral("summary_dht");
+        summaryArgs.insert(QStringLiteral("nodes"), QString::number(dht_.nodes));
+        summaryArgs.insert(QStringLiteral("buckets"), QString::number(dht_.buckets));
+        summaryArgs.insert(QStringLiteral("torrents"), QString::number(dht_.torrents));
+    } else if (dht_.known) {
+        summaryKey = QStringLiteral("summary_dht_off");
+    }
+    setLabelText(reinterpret_cast<quintptr>(summaryLabel_), trArgs(summaryKey, summaryArgs));
 }
 
 void MainWindow::setFilter(const QString &name)
@@ -680,6 +690,9 @@ void MainWindow::showActions(const Torrent &torrent, quintptr morePtr)
         popupAddAction(popup, trKey(QStringLiteral("torrent_stop")), !stopped, [this, torrent]() {
             startStopTorrent(torrent.id, false);
         });
+        popupAddAction(popup, trKey(QStringLiteral("torrent_reannounce")), true, [this, torrent]() {
+            reannounceTorrent(torrent.id);
+        });
         popupAddAction(popup,
                          trKey(QStringLiteral("copy_hash")),
                          !torrent.hashString.isEmpty(),
@@ -790,6 +803,28 @@ void MainWindow::startStopTorrent(qint64 torrentId, bool start)
     thread->start();
 }
 
+void MainWindow::reannounceTorrent(qint64 torrentId)
+{
+    const QString rpcUrl = settings_.rpcUrl;
+    const RpcCredentials credentials = credentialsFrom(settings_);
+    QThread *thread = QThread::create([this, torrentId, rpcUrl, credentials]() {
+        QString error;
+        std::optional<QString> endpoint = normalizeRpcUrl(rpcUrl, &error);
+        if (!endpoint.has_value()) {
+            QMetaObject::invokeMethod(this, [this, error]() { onReannounceReady(error); }, Qt::QueuedConnection);
+            return;
+        }
+        RpcClient client(*endpoint, credentials);
+        if (!client.reannounceTorrent(torrentId, &error)) {
+            QMetaObject::invokeMethod(this, [this, error]() { onReannounceReady(error); }, Qt::QueuedConnection);
+            return;
+        }
+        QMetaObject::invokeMethod(this, [this]() { onReannounceReady({}); }, Qt::QueuedConnection);
+    });
+    connect(thread, &QThread::finished, thread, &QObject::deleteLater);
+    thread->start();
+}
+
 void MainWindow::confirmRemoveTorrent(qint64 torrentId, const QString &name)
 {
     const std::optional<bool> deleteData = confirmRemove(this,
@@ -849,12 +884,19 @@ void MainWindow::spawnRefresh()
         QString error;
         std::optional<QString> normalized = normalizeRpcUrl(endpoint, &error);
         QVector<Torrent> rows;
+        DhtStats dht;
         if (normalized.has_value()) {
             RpcClient client(*normalized, credentials);
             rows = client.getTorrents(detailed, &error);
+            if (error.isEmpty()) {
+                QString dhtError;
+                if (const std::optional<DhtStats> stats = client.dhtStats(&dhtError)) {
+                    dht = *stats;
+                }
+            }
         }
         QMetaObject::invokeMethod(this,
-                                  [this, rows, error]() { onTorrentsReady(rows, error); },
+                                  [this, rows, error, dht]() { onTorrentsReady(rows, error, dht); },
                                   Qt::QueuedConnection);
     });
     connect(thread, &QThread::finished, thread, &QObject::deleteLater);
@@ -1188,11 +1230,12 @@ void MainWindow::pollWorker()
     }
 }
 
-void MainWindow::onTorrentsReady(QVector<Torrent> torrents, QString error)
+void MainWindow::onTorrentsReady(QVector<Torrent> torrents, QString error, DhtStats dht)
 {
     busy_ = false;
     if (error.isEmpty()) {
         torrents_ = std::move(torrents);
+        dht_ = dht;
         statusMode_ = QStringLiteral("online");
         statusDetail_.clear();
     } else {
@@ -1264,6 +1307,17 @@ void MainWindow::onStartStopReady(QString error, bool start)
         const QString text =
             rpcMethodUnsupported(error) ? trKey(QStringLiteral("torrent_start_unsupported")) : error;
         QMessageBox::warning(this, title, text);
+        return;
+    }
+    spawnRefresh();
+}
+
+void MainWindow::onReannounceReady(QString error)
+{
+    if (!error.isEmpty()) {
+        const QString text =
+            rpcMethodUnsupported(error) ? trKey(QStringLiteral("torrent_reannounce_unsupported")) : error;
+        QMessageBox::warning(this, trKey(QStringLiteral("torrent_reannounce")), text);
         return;
     }
     spawnRefresh();

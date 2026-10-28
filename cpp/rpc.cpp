@@ -575,6 +575,37 @@ bool RpcClient::stopTorrent(qint64 torrentId, QString *error)
     return error == nullptr || error->isEmpty();
 }
 
+bool RpcClient::reannounceTorrent(qint64 torrentId, QString *error)
+{
+    QJsonObject arguments;
+    arguments.insert(QStringLiteral("ids"), QJsonArray{torrentId});
+    call(QStringLiteral("torrent-reannounce"), arguments, error);
+    return error == nullptr || error->isEmpty();
+}
+
+std::optional<DhtStats> RpcClient::dhtStats(QString *error)
+{
+    const QJsonValue result = call(QStringLiteral("dht-stats"), {}, error);
+    if ((error != nullptr && !error->isEmpty()) || !result.isObject()) {
+        return std::nullopt;
+    }
+    const QJsonObject obj = result.toObject();
+    const auto number = [](const QJsonValue &value) -> quint64 {
+        const double raw = value.toDouble();
+        if (raw <= 0) {
+            return 0;
+        }
+        return static_cast<quint64>(raw);
+    };
+    DhtStats stats;
+    stats.known = true;
+    stats.supported = obj.value(QStringLiteral("supported")).toBool(false);
+    stats.nodes = number(obj.value(QStringLiteral("numNodes")));
+    stats.buckets = number(obj.value(QStringLiteral("numBuckets")));
+    stats.torrents = number(obj.value(QStringLiteral("numTorrents")));
+    return stats;
+}
+
 bool RpcClient::setFilePriority(qint64 torrentId,
                                 qint64 index,
                                 bool wanted,

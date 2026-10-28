@@ -14,6 +14,9 @@ struct TorrentsTunnelConfig {
     QString rpcUser;
     QString rpcPass;
     QStringList trackers;
+    bool dht = true;
+    bool haveDhtFile = false;
+    QString dhtFile;
     QString sectionName;
     QString confPath;
     QString dataDir;
