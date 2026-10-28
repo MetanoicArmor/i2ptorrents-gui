@@ -1,6 +1,6 @@
 cask "i2ptorrents" do
-  version "0.2.7"
-  sha256 "c6e9985fa3c4bb866e5447caffbbe8a3cd7fa31a4befdc67ba54412a4f9bbdc5"
+  version "0.3.0"
+  sha256 "36067c784c6a71761787bd2dd8947bf127c0b349dcd13ed401ab49a0b1e1cf99"
 
   url "https://github.com/MetanoicArmor/i2ptorrents-gui/releases/download/v#{version}/I2PTorrents-macOS-arm64-v#{version}.zip"
   name "I2P Torrents"

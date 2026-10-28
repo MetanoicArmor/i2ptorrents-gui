@@ -13,7 +13,7 @@ Templates for distributing **I2P Torrents** from [GitHub Releases](https://githu
 ## Bump after a release
 
 ```bash
-./packaging/refresh-checksums.sh v0.2.7
+./packaging/refresh-checksums.sh v0.3.0
 ```
 
 Paste the printed SHA-256 values into Homebrew / AUR / winget / Flatpak files, then:
@@ -21,5 +21,5 @@ Paste the printed SHA-256 values into Homebrew / AUR / winget / Flatpak files, t
 1. Commit packaging updates in this repo.
 2. Copy `packaging/homebrew/Casks/i2ptorrents.rb` into the tap repo and push.
 3. For AUR: update `PKGBUILD` + `.SRCINFO` and push to `aur.archlinux.org`.
-4. For winget: open a PR with the manifests under `winget/0.2.7/`.
+4. For winget: open a PR with the manifests under `winget/0.3.0/`.
 5. For Flatpak: submit/update the Flathub repo when ready.
